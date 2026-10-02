@@ -11,99 +11,88 @@
   English · <a href="README.zh-CN.md">简体中文</a> · <a href="INSTALL.md">Install & update</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
-Give your coding agent a video link or local file. Agent Video gets the **transcript, frames, audio, video and metadata** it needs to answer your question. Your agent reads the evidence, explains what it finds, and keeps the materials for follow-ups.
+Send your agent a video link. Ask what it's about, what's happening at a particular moment, or ask it to download the video. Local videos and screen recordings work too.
 
-Works with **Codex, Claude Code**, and other hosts that support Agent Skills.
+Agent Video gives your agent the **transcript, screenshots, audio, video files and video information** it needs. Your agent reads those materials and answers your question.
 
-## One video. Keep asking.
+Works with **Codex, Claude Code**, and other coding agents that support Skills.
 
-Ask your agent naturally:
+## What you can ask
 
 ```text
 Summarize this tutorial: <video-url>
-Show me the code on screen at 02:10.
+Extract the transcript with timestamps.
+What's happening at 02:10? Show me a clear screenshot.
 Save the video in the best available quality.
 ```
 
-Each question builds on the same materials. A transcript can answer what was said; a clear frame can show what happened. When you ask for the file, existing media is reused or upgraded as needed.
+You can also read code or charts in a recording, save an audio clip, or find a tutorial that meets your requirements. Finding videos uses your agent's search tools; Agent Video reads the candidates when their content needs checking.
 
-- **Get just what you need.** Captions first, optional local speech-to-text, selected frames for visual questions, and media files on request.
-- **Keep the original timeline.** Transcripts and frames refer to times in the source video, including when you read an interval.
-- **Read it, then keep it.** Evidence stays in a local folder with a manifest for reuse. The same files can support an answer or be delivered to you.
+Only the materials needed for your question are fetched. Follow-up questions reuse saved files, and you can keep the transcripts, screenshots and media yourself.
 
-Platform extraction is implemented in this project. The runtime uses Python and FFmpeg; speech-to-text adds an optional local model. Your host agent handles understanding and answers.
+## Install
 
-## Get started
-
-Copy this into your coding agent:
+Copy this message to your agent:
 
 ```text
-Install Agent Video for my coding agent by following this guide:
+Install Agent Video by following this guide:
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-Requires **Python 3.11+** and **FFmpeg / ffprobe**. The [installation guide](INSTALL.md) covers setup, Skill registration, Windows, updates and optional speech-to-text. Already installed? Ask your agent to update Agent Video using the same guide.
+Requires **Python 3.11+** and **FFmpeg**. The [guide](INSTALL.md) covers installation, Windows, updates and optional speech-to-text. To update, ask your agent to follow the same guide.
 
-Skill discovery is handled by your host. If needed, explicitly request Agent Video or select its Skill.
-
-## More things to try
-
-| Ask your agent | What it uses |
-|---|---|
-| “Extract a timestamped transcript.” | Available captions, or configured local ASR |
-| “Read the UI, code or chart in this recording.” | Selected frames that the agent opens and inspects |
-| “Save the audio from 01:20 to 01:35.” | The video's actual audio track, clipped to that interval |
-| “Who made this video, and how long is it?” | Metadata such as author, title and duration |
-| “Find a Chinese FFmpeg tutorial under 10 minutes with a hands-on demo.” | Host search tools, then evidence to verify the candidates |
-
-Video discovery uses the host's available search tools. Search follows your chosen platform, then the current video task's platform, otherwise YouTube. It expands across platforms when you request it. Titles and search snippets support screening; content claims require reading the video evidence.
+After installation, ask your agent to use Agent Video with a link or local file.
 
 ## Supported sources
 
-**v0.1 is an early MVP.** The scope below reflects real public samples; access varies by video, region and platform changes.
+**v0.1 is an early release.** Support varies by platform and video; some links may still fail.
 
-| Source | Current scope |
+| Source | What works today |
 |---|---|
-| **Local files** | Subtitles, frames, audio/video export, intervals and reuse |
-| **YouTube** | Public videos and Shorts: captions, video with audio, frames and reuse; 1080p verified |
-| **Bilibili** | Public videos and individual parts: available captions, video/audio, local ASR and reuse; 1080p verified |
-| **TikTok** · experimental | Captions or local ASR, complete video/audio, frames and reuse verified on two public samples |
-| **Tencent Video** · experimental | One public, non-DRM sample downloaded and inspected |
-| **Douyin** · experimental | Current anonymous path encounters a signature challenge; content and downloads remain unverified |
+| **Local files** | Read subtitles, take screenshots, and export audio, video or a selected clip |
+| **YouTube** | Read captions and download public videos and Shorts; 1080p downloads tested |
+| **Bilibili** | Read available captions and download public videos, including a chosen part; 1080p downloads tested |
+| **TikTok** | Experimental: transcripts, downloads and screenshots tested on two public videos |
+| **Douyin** | Not working yet: the current request is blocked by a signature check |
 
-Other YouTube signature, token and login paths remain unsupported. Unknown websites, ordinary webpages and direct media URLs are unsupported; downloaded files can be read locally. Live streams and DRM are outside the current scope.
+Other websites, direct media links, live streams and DRM-protected videos are not supported. You can use a downloaded file as local input.
 
-Captions and ASR may contain errors or cover only part of a video. Frames are samples; reading them does not imply a complete review. Screen text and spoken transcripts are kept distinct. Cookies are used only from a file you explicitly supply; browser credentials are never read automatically.
+Subtitles are used first. If none are available, optional speech-to-text can transcribe the audio. Transcripts may contain errors or cover only part of a video; screenshots show selected moments.
 
-## CLI
+<details>
+<summary><strong>Use the command line</strong></summary>
 
 After installation, run from the project directory:
 
 ```bash
-# Read speech
+# Get a transcript
 .venv/bin/agent-video "<video-url-or-local-file>" --get transcript
 
-# Continue with the returned manifest; inspect a moment at source resolution
+# Get a clear screenshot using the saved manifest
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 02:10 --width 0 --quality source
 
-# Save the same video using the returned manifest
+# Save the same video
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
 ```
 
-`--get` accepts `info,transcript,frames,audio,video` and supports combinations. Results are saved in `.agent-video/` by default. JSON output points to the files and manifest; partial success preserves usable evidence. Use `--help` for intervals, language, quality, parts and explicit Cookie files. Windows uses `.venv\Scripts\agent-video.exe`.
+`--get` accepts `info,transcript,frames,audio,video`, separately or together. Files are saved in `.agent-video/` by default. The command returns JSON with file paths and a `manifest.json` that tracks saved materials for reuse. If one step fails, successful files are still kept.
+
+See `--help` for time ranges, language, quality, video parts and Cookie files. Windows uses `.venv\Scripts\agent-video.exe`.
+
+</details>
 
 ## Contributing
 
-Broken public video links, clearer diagnostics and simpler agent workflows are useful contributions. [Open an issue](https://github.com/russeell/Agent-Video/issues) with the source platform, requested material and diagnostic message; keep credentials and signed media URLs out of reports.
+Found a broken link or confusing behavior? [Open an issue](https://github.com/russeell/Agent-Video/issues) with the video link, what you wanted to do and the error message. Leave out cookies and private download addresses.
 
-Install the project, make your change, then run the offline regression suite with FFmpeg available:
+For code changes, install the project and FFmpeg, then run the tests:
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Online acquisition and real ASR are checked separately. Improvements should preserve evidence reuse and keep the tool small.
+These tests run offline. Check real downloads or speech-to-text separately when changing those features.
 
-## License & credits
+## License
 
-[MIT](LICENSE). Acquisition research includes [yt-dlp](https://github.com/yt-dlp/yt-dlp), [youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api), [BBDownT](https://github.com/LOVAHE/BBDownT), and [F2](https://github.com/Johnserf-Seed/f2). Design references include [claude-video](https://github.com/bradautomates/claude-video), [claude-real-video](https://github.com/HUANGCHIHHUNGLeo/claude-real-video), and [Video-Browser](https://github.com/chrisx599/Video-Browser). Required third-party notices are preserved in the source.
+[MIT](LICENSE).

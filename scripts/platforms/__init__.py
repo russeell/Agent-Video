@@ -261,9 +261,6 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if host in ('www.youtube.com', 'youtube.com', 'm.youtube.com', 'youtu.be'):
         from . import youtube
         return youtube.resolve(url, part=part, cookies=cookies, need=need)
-    if host in ('v.qq.com', 'm.v.qq.com'):
-        from . import tencent
-        return tencent.resolve(url, part=part, cookies=cookies, need=need)
     if host.endswith('.tiktok.com') or host == 'tiktok.com':
         from . import tiktok
         return tiktok.resolve(url, part=part, cookies=cookies, need=need)

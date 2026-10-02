@@ -2,14 +2,13 @@
 import unittest
 from unittest.mock import patch
 from scripts import platforms
-from scripts.platforms import bilibili, douyin, tencent, tiktok, youtube
+from scripts.platforms import bilibili, douyin, tiktok, youtube
 
 
 class RoutingTest(unittest.TestCase):
     def test_known_sources_dispatch_to_dedicated_platform_adapters(self):
         routes = [(bilibili, 'https://www.bilibili.com/video/BVexample', 2),
                   (youtube, 'https://www.youtube.com/shorts/abcdefghijk', None),
-                  (tencent, 'https://v.qq.com/x/page/q326831cny0.html', None),
                   (tiktok, 'https://vm.tiktok.com/short/', None),
                   (douyin, 'https://v.douyin.com/short/', None)]
         with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('Routing must not access HTTP')) as network:
@@ -25,6 +24,8 @@ class RoutingTest(unittest.TestCase):
                    ('https://example.test/page.html', 'unsupported_source'),
                    ('https://example.test/vod.m3u8', 'unsupported_source'),
                    ('https://youtube.com.evil.test/watch?v=abcdefghijk', 'unsupported_source'),
+                   ('https://v.qq.com/x/page/q326831cny0.html', 'unsupported_source'),
+                   ('https://m.v.qq.com/x/page/q326831cny0.html', 'unsupported_source'),
                    ('ftp://www.youtube.com/watch?v=abcdefghijk', 'invalid_url'),
                    ('file://www.youtube.com/watch?v=abcdefghijk', 'invalid_url')]
         with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('Unknown sources must not access HTTP')) as network:
