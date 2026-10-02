@@ -85,6 +85,7 @@ Skill 可用后，直接向 Agent 提问：“这个视频讲了什么”“02:1
 - 帧和文字时间相对原视频，帧同时记录请求和实际时间。
 - `--get video` 默认选择当前可取得的最高质量，与 `--quality source` 一致，不再默认限制1080p。显式 `--quality 1080p` 可限制下载档位；仅抽帧时 `auto` 仍按目标尺寸选择。最高可取得质量不代表上传原始母版。需要读小字可用 `--width 0 --quality source`。
 - 平台声明档位与实际可取得格式分别记录；画面不足时提示实际尺寸，复用当前上限，不反复下载相同低清源。显式提供新的 Cookie 或更高质量要求时可重新检查。
+- 先看画面再保存时，已有完整、最高质量的视频轨就只补取缺少的音轨并无损合并；再次保存直接返回完整文件。
 - B 站一次取一个分 P，默认 P1；可使用 URL 的 `p` 或 `--part`，继续 evidence 时仍是同一部分。
 - 用户原文件只读；结果目录由用户决定保留或删除，同一结果目录串行调用。
 - 临时网络故障、下载途中断流或长度不足时最多尝试三次；HLS 只重试当前片段。完整下载后才交付，失败不覆盖已有文件。
@@ -98,13 +99,29 @@ Skill 可用后，直接向 Agent 提问：“这个视频讲了什么”“02:1
 .venv/bin/python -m pip install -e '.[asr]'
 ```
 
-事先准备 faster-whisper 支持的本地模型目录，并设置：
+首次使用时明确下载一个模型，例如多语言 small（约 484 MB，保存在项目外）：
 
 ```bash
-export AGENT_VIDEO_ASR_MODEL="/absolute/path/to/whisper-model"
+.venv/bin/python - <<'PY'
+from pathlib import Path
+import truststore
+truststore.inject_into_ssl()
+from huggingface_hub import snapshot_download
+snapshot_download("Systran/faster-whisper-small", token=False,
+    local_dir=Path.home() / ".cache/agent-video/models/faster-whisper-small",
+    allow_patterns=["config.json", "model.bin", "tokenizer.json", "vocabulary.*"])
+PY
 ```
 
-默认 CPU / int8，建议从多语言 small 模型开始。普通读取不会下载模型；未配置时仍可取得信息、字幕、画面和媒体。区间转录只处理目标音频段。
+让调用脚本的进程使用这个模型目录：
+
+```bash
+export AGENT_VIDEO_ASR_MODEL="$HOME/.cache/agent-video/models/faster-whisper-small"
+```
+
+已准备其他 faster-whisper 模型时可直接使用它的绝对路径。默认 CPU / int8；普通读取不会下载模型，区间转录只处理目标音频段。未配置时仍可取得信息、字幕、画面和媒体。
+
+在单独终端 `export` 不会更新已经运行的 Agent 桌面进程；可把模型目录告诉 Agent，由它在调用脚本时传入 `AGENT_VIDEO_ASR_MODEL`。可选依赖已限制 PyAV 版本，避免 faster-whisper 1.2.1 与 PyAV 19 的已知不兼容。
 
 ## 验证与限制
 
@@ -113,13 +130,13 @@ export AGENT_VIDEO_ASR_MODEL="/absolute/path/to/whisper-model"
 | 来源 / 能力 | 实际结果 |
 |---|---|
 | 本地文件 | 信息、同名字幕、定点 / 区间帧、音视频导出和跨轮复用通过 |
-| Bilibili | 公开多 P 样本 P1 与 BV1ggFseVES3 的匿名信息、完整音视频和帧获取通过；后者匿名完整下载1920×1080成功，视频/音频约237.9秒，字幕未取得；补帧复用和质量提示已测 |
+| Bilibili | 公开多 P 样本 P1 与 BV1ggFseVES3 的匿名信息、完整音视频和帧获取通过；后者1920×1080、约237.9秒，字幕未取得。独立 Agent 自动选择 Skill，改看高清画面后完成概括与02:10追问；随后保存仅补音频，再次保存零网络请求 |
 | 通用 HTTP / HTML / HLS | 本地真实 HTTP 样本验证直链、单个 video/source、TS 和 fMP4 点播 HLS、master 变体及音轨 / 时长；不是任意网页或任意 HLS 支持 |
 | 腾讯视频（实验） | [公开短视频 q326831cny0](https://v.qq.com/x/page/q326831cny0.html) 匿名完整下载和抽帧通过：1280×720、215.958秒、H.264 + AAC；不推广到所有腾讯内容 |
 | TikTok（实验） | 公开样本信息、媒体候选与 12 段字幕获取通过；视频下载尚未实测 |
 | YouTube（实验） | 仅公开 player response 的信息、字幕及直接媒体地址路径；不处理播放器签名 / JS challenge，暂无成功线上下载验收 |
 | Douyin（实验） | 仅公开页面嵌入信息路径；未通过真实样本验收，挑战页面可能无法读取 |
-| 本地 ASR（可选） | 音频裁剪与时间偏移已测，未运行真实模型，效果尚未验证 |
+| 本地 ASR（可选） | small / CPU / int8 实测英文真人语音与中文合成语音、区间时间和文字稿复用通过；中文有少量错字，尚未做真人普通话质量评估 |
 
 通用路径支持公开媒体直链、单个 HTML video/source 和基础非加密 VOD HLS（含 TS、fMP4 初始化段和 master 变体）。多视频网页、JS 动态播放器、HLS 独立音轨组 / 字节范围 / discontinuity / 加密 / 直播、MPD、跨调用断点续传仍未支持；返回具体诊断。腾讯只接单视频 `/x/page/VID.html` 或 `/x/cover/CID/VID.html`，不遍历整剧集，不补齐试看，不处理 DRM。以上是少量样本验证，不能推断平台所有链接均可用。
 

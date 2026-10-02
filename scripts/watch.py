@@ -328,6 +328,7 @@ class Watch:
                 if self.args.audio_track is not None:
                     media.audio_index(info, self.args.audio_track)
                 return path, info
+        cached_source = dict(self.data['source'])
         resolved = self.resolve(media_needed=True)
         if __package__:
             from . import platforms
@@ -339,6 +340,30 @@ class Watch:
                                             width=self.args.width) if formats else []
         visual = next((f for f in selected if f.get('has_video')), None)
         max_width = max((f.get('width') or 0 for f in formats if f.get('has_video')), default=0)
+        video_path = None
+        if (purpose == 'video' and cached_source == resolved['source'] and len(selected) == 2
+                and visual and visual.get('has_audio') is False
+                and selected[1].get('has_audio') and not selected[1].get('has_video')
+                and all(f.get('protocol') not in ('hls', 'dash')
+                        and f.get('ext') not in ('m3u8', 'mpd') for f in selected)):
+            expected = resolved.get('metadata', {}).get('duration')
+            for a in self.data['artifacts']:
+                if (a['type'] != 'video' or not a.get('frames_only') or a.get('quality') != 'source'
+                        or not self.current_quality(a) or a.get('access_context') != self.access_context
+                        or (cached_source.get('platform') == 'bilibili' and a.get('quality_revision', 0) < 1)
+                        or not manifest.covers(a, 0, full_end)):
+                    continue
+                path = manifest.artifact_path(self.directory, a)
+                info = media.probe(path)
+                if (not info['video'] or info['audio']
+                        or not manifest.covers(a, 0, info['duration'])
+                        or info['video']['width'] != visual.get('width')
+                        or info['video']['height'] != visual.get('height')
+                        or (expected and (info['duration'] < expected - max(2, expected * .03)
+                            or a.get('source_range', {}).get('end', 0) < expected - max(2, expected * .03)))):
+                    continue
+                video_path = path
+                break
         # Old evidence has no ceiling marker. Resolve once, then compare actual files
         # with the chosen format rather than downloading the same low-quality stream.
         if purpose == 'frames' and self.args.quality == 'auto' and self.args.width > 0 and visual and visual.get('width') and visual.get('height'):
@@ -361,7 +386,8 @@ class Watch:
         print('Obtaining required media…', file=sys.stderr)
         path = Path(platforms.download(resolved, self.directory / ('video' if purpose != 'audio' else 'audio'),
                                       want_video=want_video,
-                                      quality=self.args.quality, width=self.args.width, cookies=self.args.cookies)).resolve()
+                                      quality=self.args.quality, width=self.args.width, cookies=self.args.cookies,
+                                      video_path=video_path)).resolve()
         if not path.is_file() or path.stat().st_size == 0:
             raise media.Failure('invalid_media', 'Download did not produce a nonempty file.')
         info = media.probe(path)

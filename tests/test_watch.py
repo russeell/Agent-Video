@@ -117,6 +117,64 @@ class WatchTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(fetch.call_count, 1)
 
+    def test_frames_then_video_fetches_only_missing_audio_and_preserves_cached_track(self):
+        from scripts import platforms
+        silent = self.root / 'silent.mp4'
+        audio = self.root / 'audio.m4a'
+        subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-i', self.video,
+                        '-map', '0:v:0', '-c', 'copy', silent], check=True)
+        subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-i', self.video,
+                        '-map', '0:a:0', '-c', 'copy', audio], check=True)
+        source = {'platform': 'bilibili', 'id': 'BVdemo', 'part': 1,
+                  'url': 'https://www.bilibili.com/video/BVdemo'}
+        resolved = {'source': source, 'metadata': {'duration': 2}, 'subtitles': [], 'diagnostics': [],
+                    'formats': [{'url': 'https://example.test/video', 'ext': 'mp4',
+                                 'has_video': True, 'has_audio': False, 'width': 160, 'height': 120},
+                                {'url': 'https://example.test/audio', 'ext': 'm4a',
+                                 'has_video': False, 'has_audio': True}]}
+        def fetch_track(url, path, **kwargs):
+            shutil.copy2(audio if url.endswith('/audio') else silent, path)
+            return path
+        with patch.object(platforms, 'resolve', return_value=resolved), \
+                patch.object(platforms, 'download_file', side_effect=fetch_track) as fetch:
+            code, first = self.call(source['url'], '--out', str(self.root / 'out'),
+                                    '--get', 'frames', '--at', '0.2', '--width', '0')
+            self.assertEqual(code, 0, first)
+            self.assertEqual([c.args[0] for c in fetch.call_args_list], ['https://example.test/video'])
+            evidence = first['manifest']
+            data = json.loads(Path(evidence).read_text())
+            cached = Path(evidence).parent / next(a['path'] for a in data['artifacts'] if a['type'] == 'video')
+            original = cached.read_bytes()
+            self.assertFalse(media.probe(cached)['audio'])
+            run = media.run
+            def fail_merge(args, **kwargs):
+                if '1:a:0' in args:
+                    raise media.Failure('command_failed', 'Merge failed.')
+                return run(args, **kwargs)
+            for failure in ('audio', 'merge'):
+                with self.subTest(failure=failure):
+                    if failure == 'audio':
+                        context = patch.object(platforms, 'download_file', side_effect=media.Failure('network_failed', 'Audio failed.'))
+                    else:
+                        context = patch.object(media, 'run', side_effect=fail_merge)
+                    with context:
+                        code, failed = self.call('--evidence', evidence, '--get', 'video')
+                    self.assertEqual(code, 2, failed)
+                    self.assertEqual(cached.read_bytes(), original)
+                    self.assertEqual(list(cached.parent.iterdir()), [cached])
+            fetch.reset_mock()
+            code, saved = self.call('--evidence', evidence, '--get', 'video')
+            self.assertEqual(code, 0, saved)
+            self.assertEqual([c.args[0] for c in fetch.call_args_list], ['https://example.test/audio'])
+            complete = next(a['path'] for a in saved['artifacts'] if a['type'] == 'video')
+            self.assertTrue(media.probe(complete)['audio'])
+            self.assertEqual(cached.read_bytes(), original)
+            fetch.reset_mock()
+            code, repeated = self.call('--evidence', evidence, '--get', 'video')
+            self.assertEqual(code, 0, repeated)
+            self.assertEqual(next(a['path'] for a in repeated['artifacts'] if a['type'] == 'video'), complete)
+            fetch.assert_not_called()
+
     def test_insufficient_quality_reuses_ceiling_and_upgrades_with_new_credentials(self):
         from scripts import platforms
         larger = self.root / 'larger.mp4'

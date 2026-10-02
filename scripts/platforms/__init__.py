@@ -181,17 +181,27 @@ def select_formats(formats, *, want_video=True, quality='auto', width=768):
     return result
 
 
-def download(resolved, directory, *, want_video=True, quality='auto', width=768, cookies=None):
+def download(resolved, directory, *, want_video=True, quality='auto', width=768, cookies=None, video_path=None):
     selected = select_formats(resolved['formats'], want_video=want_video, quality=quality, width=width)
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     paths = []
+    owned = []
+    reuse_video = (video_path is not None and len(selected) == 2
+                   and selected[0].get('has_video') and selected[0].get('has_audio') is False
+                   and selected[1].get('has_audio') and not selected[1].get('has_video')
+                   and all(f.get('protocol') not in ('hls', 'dash')
+                           and f.get('ext') not in ('m3u8', 'mpd') for f in selected))
     token = uuid.uuid4().hex[:12]
     try:
         for index, candidate in enumerate(selected):
+            if index == 0 and reuse_video:
+                paths.append(Path(video_path))
+                continue
             if candidate.get('protocol') == 'hls' or candidate.get('ext') == 'm3u8':
                 from .generic import download_hls
                 paths.append(download_hls(candidate, directory / f'{token}-{index}.mkv', cookies=cookies))
+                owned.append(paths[-1])
                 continue
             if candidate.get('protocol') == 'dash' or candidate.get('ext') == 'mpd':
                 raise Failure('format_unsupported', 'DASH streaming is not implemented.', 'Use another available format or local media.')
@@ -200,9 +210,11 @@ def download(resolved, directory, *, want_video=True, quality='auto', width=768,
                 ext = 'bin'
             paths.append(download_file(candidate['url'], directory / f'{token}-{index}.{ext}',
                                        headers=candidate.get('headers'), cookies=cookies))
+            owned.append(paths[-1])
         if len(paths) == 2:
             final = directory / f'{token}.mkv'
             paths.append(final)
+            owned.append(final)
             media.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
                        '-i', paths[0], '-i', paths[1], '-map', '0:v:0', '-map', '1:a:0', '-c', 'copy', final], timeout=600)
         else:
@@ -215,12 +227,12 @@ def download(resolved, directory, *, want_video=True, quality='auto', width=768,
         expected = resolved.get('metadata', {}).get('duration')
         if expected and actual['duration'] < expected - max(2, expected * .03):
             raise Failure('download_incomplete', 'Downloaded media is shorter than the platform duration.', 'Retry or choose a different format.')
-        for path in paths:
+        for path in owned:
             if path != final:
                 path.unlink(missing_ok=True)
         return final
     except BaseException:
-        for path in paths:
+        for path in owned:
             path.unlink(missing_ok=True)
         raise
 
