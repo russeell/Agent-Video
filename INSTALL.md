@@ -1,6 +1,6 @@
-# Install & update Agent Video
+# Install Agent Video
 
-Instructions for coding agents. Use an existing checkout when available; otherwise clone the public repository into the user's workspace. Keep the whole project in place: the host Skill links to it, including its `.venv`.
+Instructions for coding agents setting up Agent Video for the first time. If it is already installed, follow [UPDATE.md](UPDATE.md). Use an existing checkout when available; otherwise clone the public repository into the user's workspace. Keep the whole project in place: the host Skill links to it, including its `.venv`.
 
 ## Install
 
@@ -17,10 +17,13 @@ Install missing prerequisites with the environment's package manager (for exampl
 ```bash
 git clone https://github.com/russeell/Agent-Video.git
 cd Agent-Video
+# Create this only if no suitable .venv exists
 python3 -m venv .venv
 .venv/bin/python -m pip install -e .
 .venv/bin/agent-video --help
 ```
+
+Keep an existing `.venv` if it uses Python 3.11+. If it is managed by uv and has no pip, install with `uv pip install --python .venv/bin/python -e .` instead.
 
 Register the Skill for the current host from the project directory. Check an existing `agent-video` link before replacing it; do not overwrite an unrelated installation.
 
@@ -36,22 +39,6 @@ ln -s "$(pwd -P)" "$HOME/.claude/skills/agent-video"
 
 Use the appropriate host block. Start a new session; restart the host if the Skill is not detected. Installing the Python package alone does not register the Skill.
 
-## Update
-
-From the existing project directory, inspect local changes and confirm its remote, then update without rewriting history:
-
-```bash
-git status --short
-git remote -v
-git pull --ff-only
-.venv/bin/python -m pip install -e .
-.venv/bin/agent-video --help
-```
-
-Preserve local changes, evidence directories and prepared models. If the pull cannot fast-forward, report the conflict rather than resetting or forcing it. If ASR is installed, reinstall `-e '.[asr]'` instead. With a uv-managed environment lacking pip, use `uv pip install --python .venv/bin/python -e .` (or the ASR extra).
-
-The existing Skill link stays valid when the project remains in place. Start a new host session to load the updated Skill.
-
 ## Windows
 
 In PowerShell, use `python` and `.venv\Scripts\` instead of the Unix paths. After cloning:
@@ -64,7 +51,7 @@ New-Item -ItemType Directory -Force "$env:USERPROFILE\.agents\skills" | Out-Null
 New-Item -ItemType Junction -Path "$env:USERPROFILE\.agents\skills\agent-video" -Target (Get-Location).Path
 ```
 
-Use `.claude` instead of `.agents` for Claude Code. Check existing links first. For updates, use the same Git commands and `.\.venv\Scripts\python.exe -m pip install -e .`; a uv-managed environment uses `uv pip install --python .venv\Scripts\python.exe -e .`.
+Use `.claude` instead of `.agents` for Claude Code. Check existing links first. A uv-managed environment without pip uses `uv pip install --python .venv\Scripts\python.exe -e .`.
 
 ## Douyin
 

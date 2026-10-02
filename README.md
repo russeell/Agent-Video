@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  English · <a href="README.zh-CN.md">简体中文</a> · <a href="INSTALL.md">Install & update</a> · <a href="SKILL.md">Agent Skill</a>
+  English · <a href="README.zh-CN.md">简体中文</a> · <a href="INSTALL.md">Install</a> · <a href="UPDATE.md">Update</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
 Send your agent a video link. Ask what it's about, what's happening at a particular moment, or ask it to download the video. Local videos and screen recordings work too.
@@ -26,7 +26,7 @@ What's happening at 02:10? Show me a clear screenshot.
 Save the video in the best available quality.
 ```
 
-You can also read code or charts in a recording, save an audio clip, or find a tutorial that meets your requirements. Finding videos uses your agent's search tools; Agent Video reads the candidates when their content needs checking.
+You can also read code or charts in a recording, save an audio clip, or find a tutorial that meets your requirements. [Finding videos](SEARCH.md) uses your agent's search tools; Agent Video checks selected links and reads their content when needed.
 
 Only the materials needed for your question are fetched. Follow-up questions reuse saved files, and you can keep the transcripts, screenshots and media yourself.
 
@@ -39,9 +39,20 @@ Install Agent Video by following this guide:
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-Requires **Python 3.11+** and **FFmpeg**; Douyin also needs **Chrome or Chromium**. The [guide](INSTALL.md) covers installation, Windows, updates and optional speech-to-text. To update, ask your agent to follow the same guide.
+Requires **Python 3.11+** and **FFmpeg**; Douyin also needs **Chrome or Chromium**. The [installation guide](INSTALL.md) covers setup, Windows and optional speech-to-text.
 
 After installation, ask your agent to use Agent Video with a link or local file.
+
+## Update
+
+Already installed? Copy this message to your agent:
+
+```text
+Update my existing Agent Video installation by following this guide:
+https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
+```
+
+The [update guide](UPDATE.md) keeps your Skill link, environment, models and saved files in place.
 
 ## Supported sources
 

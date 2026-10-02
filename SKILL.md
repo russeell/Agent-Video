@@ -19,7 +19,7 @@ Let your agent watch videos.
 | 标题、作者、时长等基本信息 | `info`（metadata） |
 | 综合理解视频 | 按问题组合必要的文字与画面 |
 
-寻找视频时使用宿主已有搜索工具：用户指定平台优先，其次当前视频任务的平台，否则默认 YouTube 并简短说明。只有用户要求才跨平台搜索。只要链接时无需观看；内容条件需要读取候选验证，推荐说明是搜索信息匹配、已读文字还是已看抽样画面。保留候选链接与 manifest，供后续复用。
+寻找视频时先读 [SEARCH.md](SEARCH.md)，使用实际可用的宿主搜索工具。用户指定平台优先，其次当前视频任务的平台，否则默认 YouTube 并简短说明；只有用户要求才跨平台。筛选单视频链接、按作品去重，并用 `--get info` 核对少量候选。只要链接时无需观看；内容条件需实际读材料验证。保留链接与 manifest，推荐注明已核对信息、已读文字或已看抽样画面。
 
 ## 核心规则
 
@@ -34,7 +34,7 @@ Let your agent watch videos.
 
 ## 调用
 
-`<skill_dir>` 是本 Skill 的项目目录。使用其已安装命令的绝对路径；安装、更新和可选 ASR 见 [INSTALL.md](INSTALL.md)，支持范围见 [README.md](README.md)。Windows 对应 `<skill_dir>/.venv/Scripts/agent-video.exe`。
+`<skill_dir>` 是本 Skill 的项目目录。使用其已安装命令的绝对路径；首次安装和可选 ASR 见 [INSTALL.md](INSTALL.md)，更新见 [UPDATE.md](UPDATE.md)，支持范围见 [README.md](README.md)。Windows 对应 `<skill_dir>/.venv/Scripts/agent-video.exe`。
 
 ```bash
 # 总结讲话或提取文字；字幕优先，ASR 按配置自动选择

@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · 简体中文 · <a href="INSTALL.md">安装与更新</a> · <a href="SKILL.md">Agent Skill</a>
+  <a href="README.md">English</a> · 简体中文 · <a href="INSTALL.md">安装</a> · <a href="UPDATE.md">更新</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
 把视频链接发给 Agent，问它视频讲了什么、某个时刻发生了什么，或者让它帮你下载。本地视频和录屏也能处理。
@@ -26,7 +26,7 @@ Agent Video 为 Agent 提供所需的**文字稿、截图、音频、视频文�
 下载这个视频，选能获取到的最高画质。
 ```
 
-也可以让 Agent 看录屏里的代码或图表、保存一段音频，或找一个符合要求的视频教程。找视频用 Agent 已有的搜索工具，需要确认内容时，再用 Agent Video 读取候选视频。
+也可以让 Agent 看录屏里的代码或图表、保存一段音频，或找一个符合要求的视频教程。[找视频](SEARCH.md)用 Agent 已有的搜索工具，Agent Video 核对选中的链接，需要确认内容时再读取材料。
 
 只获取回答问题需要的材料。继续追问同一个视频时，复用已经保存的文件；文字稿、截图和音视频也可以直接拿走。
 
@@ -39,9 +39,20 @@ Agent Video 为 Agent 提供所需的**文字稿、截图、音频、视频文�
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-需要 **Python 3.11+** 和 **FFmpeg**；抖音还需要 **Chrome 或 Chromium**。[指南](INSTALL.md) 包含安装、Windows、更新和可选语音转文字的步骤。更新时，让 Agent 按同一份指南操作即可。
+需要 **Python 3.11+** 和 **FFmpeg**；抖音还需要 **Chrome 或 Chromium**。[安装指南](INSTALL.md) 包含首次安装、Windows 和可选语音转文字的步骤。
 
 安装后，给 Agent 一个链接或本地文件，让它使用 Agent Video。
+
+## 更新
+
+已经安装过？把下面这段话复制给 Agent：
+
+```text
+帮我按照这份指南更新已有的 Agent Video：
+https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
+```
+
+[更新指南](UPDATE.md) 保留现有 Skill 链接、环境、模型和已保存的文件。
 
 ## 支持哪些视频
 
