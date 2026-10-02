@@ -10,18 +10,57 @@
 
 ## 安装
 
-需要 Python 3.11+。在项目目录创建隔离环境并安装：
+需要 Python 3.11+。完整安装包含 Python 环境和宿主 Skill 注册。以下命令在下载后的项目根目录运行，适用于 macOS / Linux：
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -e .
 ```
 
-将 FFmpeg 和 ffprobe 加入 PATH。媒体获取、合并、抽帧和音频提取按需使用它们；只读取平台信息或字幕通常不需要解码器。Windows 使用 `.venv\Scripts\python.exe` 替代下文的 Python 路径。
+将 FFmpeg 和 ffprobe 加入 PATH。媒体获取、合并、抽帧和音频提取按需使用它们；只读取平台信息或字幕通常不需要解码器。
 
-让宿主 Agent 加载本目录的 [SKILL.md](SKILL.md)，并使用项目环境中的 Python。不要把本机开发 Skill 当作产品安装内容。
+然后按使用的宿主注册产品 Skill；两者都使用时分别执行：
+
+```bash
+# Codex
+mkdir -p "$HOME/.agents/skills"
+ln -s "$(pwd -P)" "$HOME/.agents/skills/agent-video"
+
+# Claude Code
+mkdir -p "$HOME/.claude/skills"
+ln -s "$(pwd -P)" "$HOME/.claude/skills/agent-video"
+```
+
+链接的是完整项目目录，包含 [SKILL.md](SKILL.md)、README、脚本和 `.venv`，只复制 SKILL.md 无法运行。保留项目原位置；已有 `agent-video` 时先检查它的指向，不重复创建或覆盖其他安装。更新同一项目目录后链接继续有效；移动目录后需要重建链接，并在新位置重新创建虚拟环境。
+
+[Codex 官方文档](https://learn.chatgpt.com/docs/build-skills)和 [Claude Code 官方文档](https://code.claude.com/docs/en/skills)说明了目录发现与自动匹配方式。安装后开始新一轮对话；若 Skill 尚未出现，重启宿主。在 Codex 的 Skill 列表或 Claude Code 的 `/agent-video` 菜单中确认它可用。
+
+Windows 使用 PowerShell 在项目根目录创建环境，并用目录联接注册；下面以 Codex 为例，Claude Code 将 `.agents` 替换为 `.claude`：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.agents\skills" | Out-Null
+New-Item -ItemType Junction -Path "$env:USERPROFILE\.agents\skills\agent-video" -Target (Get-Location).Path
+```
+
+Windows 后续调用使用 `.venv\Scripts\python.exe`。其他宿主支持 Agent Skills 时，将完整项目放入它规定的 Skill 目录，并按同样方式创建环境。当前分发以源码目录为单位；仅 `pip install` 不会自动注册 Skill。本机开发 Skill `agent-video-dev` 不属于产品安装内容。
+
+完成后可从其他工作目录检查入口；将路径替换为实际安装位置：
+
+```bash
+"$HOME/.agents/skills/agent-video/.venv/bin/python" "$HOME/.agents/skills/agent-video/scripts/watch.py" --help
+```
+
+卸载时移除宿主的 `agent-video` 目录链接即可；保留项目和结果文件。
 
 ## 使用
+
+Skill 可用后，直接向 Agent 提问：“这个视频讲了什么”“02:10 在说什么”“提取视频文字”“下载最清晰版本”或“保存刚才的视频”，并提供链接、文件或当前视频的上下文。无需每次指定项目名称；Agent 根据请求选择材料，调用脚本后读取证据、回答或交付文件。
+
+自动匹配由宿主 Agent 决定；未触发时可明确说“使用 Agent Video”，或在 Codex 中提及 `$agent-video`、在 Claude Code 中调用 `/agent-video`。安装 Skill 不会改变网站支持范围或宿主执行权限。
+
+以下为脚本直接调用示例：
 
 ```bash
 # 文字稿，附带可取得的视频信息

@@ -1,6 +1,6 @@
 ---
 name: agent-video
-description: 获取视频文字、画面、音频、文件和信息，让 Agent 阅读、回答问题并按需补取。用于用户提供视频链接或本地媒体，希望了解内容、检查操作、提取文字或保存素材时。
+description: 读取、分析和下载视频，提取文字稿、画面、音频与视频信息。用于用户给出视频链接或本地文件，要求看或总结内容、解释某个时刻或区间、分析录屏、提取字幕或画面文字、下载或保存素材，以及围绕同一视频继续追问。Use for watching, summarizing or downloading videos.
 ---
 
 # Agent Video
@@ -8,6 +8,8 @@ description: 获取视频文字、画面、音频、文件和信息，让 Agent 
 Let your agent watch videos.
 
 根据问题获取材料，再用宿主的文本、看图或音频能力理解它们。脚本负责获取和媒体处理；答案由你根据实际阅读的证据组织。
+
+用户无需明确说“使用 Agent Video”。“这个视频讲了什么”“02:10 在说什么”“提取视频文字”“下载最清晰版本”“保存刚才的视频”等请求都适用。仅讨论视频产品设计、开发本项目或普通网页搜索时不使用本 Skill。
 
 ## 选择材料
 
@@ -22,15 +24,17 @@ Let your agent watch videos.
 
 ## 调用
 
-先按 [README.md](README.md) 配置项目 Python 环境、FFmpeg 和需要的可选 ASR。使用该环境的 Python；将下面路径替换为本 Skill 的实际位置。
+`<skill_dir>` 是本 Skill 所在的项目目录，可能通过宿主 Skill 目录的链接访问。使用其 `.venv` 中的 Python 和脚本的绝对路径，不依赖当前工作目录或系统默认的 `python`。若尚未安装环境，先按 [README.md](README.md) 完成安装。FFmpeg 和可选 ASR 按材料需要使用。
+
+macOS / Linux 使用 `<skill_dir>/.venv/bin/python`；Windows 使用 `<skill_dir>/.venv/Scripts/python.exe`。下面命令以 macOS / Linux 为例，路径包含空格时仍保留引号：
 
 ```bash
-python <skill_dir>/scripts/watch.py "<url-or-file>" --get transcript
-python <skill_dir>/scripts/watch.py "<url-or-file>" --get frames --max-frames 6
-python <skill_dir>/scripts/watch.py "<url-or-file>" --get info
-python <skill_dir>/scripts/watch.py --evidence "<manifest.json>" --get frames --start 01:20 --end 01:35
-python <skill_dir>/scripts/watch.py --evidence "<manifest.json>" --get frames --at 01:23 --width 1600
-python <skill_dir>/scripts/watch.py --evidence "<manifest.json>" --get video,audio
+"<skill_dir>/.venv/bin/python" "<skill_dir>/scripts/watch.py" "<url-or-file>" --get transcript
+"<skill_dir>/.venv/bin/python" "<skill_dir>/scripts/watch.py" "<url-or-file>" --get frames --max-frames 6
+"<skill_dir>/.venv/bin/python" "<skill_dir>/scripts/watch.py" "<url-or-file>" --get info
+"<skill_dir>/.venv/bin/python" "<skill_dir>/scripts/watch.py" --evidence "<manifest.json>" --get frames --start 01:20 --end 01:35
+"<skill_dir>/.venv/bin/python" "<skill_dir>/scripts/watch.py" --evidence "<manifest.json>" --get frames --at 01:23 --width 1600
+"<skill_dir>/.venv/bin/python" "<skill_dir>/scripts/watch.py" --evidence "<manifest.json>" --get video,audio
 ```
 
 `--get` 可组合 info、transcript、frames、audio、video；默认 transcript。JSON 返回文件路径与诊断，完整材料在 evidence 目录。保留 manifest 路径用于追问，不用同一来源反复创建目录。单个 evidence 串行调用。
