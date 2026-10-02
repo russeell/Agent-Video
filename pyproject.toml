@@ -11,6 +11,9 @@ license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = ["truststore>=0.10", "cryptography>=42.0"]
 
+[project.scripts]
+agent-video = "scripts.watch:main"
+
 [project.urls]
 Repository = "https://github.com/russeell/Agent-Video"
 

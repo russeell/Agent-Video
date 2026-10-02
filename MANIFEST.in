@@ -1,4 +1,4 @@
-include README.md README.zh-CN.md SKILL.md LICENSE
+include README.md README.zh-CN.md INSTALL.md SKILL.md LICENSE
 recursive-include scripts *.py
 recursive-include tests *.py
 exclude SPEC.md AGENTS.md CLAUDE.md

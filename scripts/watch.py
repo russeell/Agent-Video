@@ -30,9 +30,9 @@ class Parser(argparse.ArgumentParser):
 
 def parser():
     p = Parser(description='Get video evidence and reuse it in follow-up questions.',
-               epilog='Examples:\n  watch.py video.mp4 --get transcript,frames\n'
-               '  watch.py --evidence manifest.json --get frames --at 01:23 --width 1600\n'
-               '  watch.py --evidence manifest.json --get video',
+               epilog='Examples:\n  agent-video video.mp4 --get transcript,frames\n'
+               '  agent-video --evidence manifest.json --get frames --at 01:23 --width 1600\n'
+               '  agent-video --evidence manifest.json --get video',
                formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('source', nargs='?')
     p.add_argument('--evidence')

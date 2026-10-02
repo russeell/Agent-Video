@@ -10,44 +10,11 @@
 
 ## 快速开始
 
-需要 **Python 3.11+**。下载和媒体处理需要将 **FFmpeg、ffprobe** 加入 `PATH`；语音转录可选。
+需要 **Python 3.11+** 和 **FFmpeg / ffprobe**。直接告诉 Agent：
 
-```bash
-git clone https://github.com/russeell/Agent-Video.git
-cd Agent-Video
-python3 -m venv .venv
-.venv/bin/python -m pip install -e .
-```
+> 阅读 [INSTALL.md](INSTALL.md)，为我当前使用的宿主安装 Agent Video。
 
-在项目目录为使用的宿主注册 Skill：
-
-```bash
-# Codex
-mkdir -p "$HOME/.agents/skills"
-ln -s "$(pwd -P)" "$HOME/.agents/skills/agent-video"
-
-# Claude Code
-mkdir -p "$HOME/.claude/skills"
-ln -s "$(pwd -P)" "$HOME/.claude/skills/agent-video"
-```
-
-链接的是**完整项目目录**，包含 `.venv`，安装后保留原位置。已有 `agent-video` 链接时先检查指向。开启新会话；仍未发现 Skill 时重启宿主。仅安装 Python 包不会自动注册 Skill。
-
-<details>
-<summary>Windows 安装</summary>
-
-克隆项目后在 PowerShell 运行。以下注册 Codex；Claude Code 将 `.agents` 替换为 `.claude`。
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.agents\skills" | Out-Null
-New-Item -ItemType Junction -Path "$env:USERPROFILE\.agents\skills\agent-video" -Target (Get-Location).Path
-```
-
-后续调用使用 `.venv\Scripts\python.exe`。已实测 macOS；Windows、Linux 尚未验收。
-
-</details>
+[INSTALL.md](INSTALL.md) 包含安装、Skill 注册、更新、Windows 和可选语音转录步骤。安装后保留项目目录。
 
 ## 使用
 
@@ -64,18 +31,18 @@ New-Item -ItemType Junction -Path "$env:USERPROFILE\.agents\skills\agent-video" 
 自动匹配由宿主决定。未触发时可明确说“使用 Agent Video”，在 Codex 中选择 `$agent-video`，或在 Claude Code 中调用 `/agent-video`。
 
 <details>
-<summary>直接调用脚本</summary>
+<summary>直接调用 CLI</summary>
 
 ```bash
 # 优先字幕；没有可用字幕时使用已配置的本地 ASR
-.venv/bin/python scripts/watch.py "<视频链接或本地文件>" --get transcript
+.venv/bin/agent-video "<视频链接或本地文件>" --get transcript
 
 # 获取清晰画面或下载素材
-.venv/bin/python scripts/watch.py "<视频链接>" --get frames --at 02:10 --width 0 --quality source
-.venv/bin/python scripts/watch.py "<视频链接>" --get video,audio
+.venv/bin/agent-video "<视频链接>" --get frames --at 02:10 --width 0 --quality source
+.venv/bin/agent-video "<视频链接>" --get video,audio
 
 # 使用前一次返回的 manifest 继续获取
-.venv/bin/python scripts/watch.py --evidence "/path/to/manifest.json" --get video
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
 ```
 
 `--get` 支持 `info,transcript,frames,audio,video`，默认 `transcript`。语言、区间、质量、分 P 和 Cookie 文件等参数见 `--help`。仅使用显式提供的 Cookie 文件，不自动读取浏览器凭据。
@@ -105,40 +72,7 @@ New-Item -ItemType Junction -Path "$env:USERPROFILE\.agents\skills\agent-video" 
 
 ## 可选语音转录
 
-<details>
-<summary>准备本地 faster-whisper 模型</summary>
-
-安装可选依赖：
-
-```bash
-.venv/bin/python -m pip install -e '.[asr]'
-```
-
-明确下载模型，保存在项目之外：
-
-```bash
-.venv/bin/python - <<'PY'
-from pathlib import Path
-import truststore
-truststore.inject_into_ssl()
-from huggingface_hub import snapshot_download
-snapshot_download("Systran/faster-whisper-small", token=False,
-    local_dir=Path.home() / ".cache/agent-video/models/faster-whisper-small",
-    allow_patterns=["config.json", "model.bin", "tokenizer.json", "vocabulary.*"])
-PY
-```
-
-在调用 Agent Video 的进程中设置模型路径：
-
-```bash
-export AGENT_VIDEO_ASR_MODEL="$HOME/.cache/agent-video/models/faster-whisper-small"
-```
-
-另一个终端中的 `export` 不会更新已运行的桌面 Agent。可告诉 Agent 模型目录，由它在调用时传入变量。Windows 使用 `$env:AGENT_VIDEO_ASR_MODEL`，脚本使用 `.venv\Scripts\python.exe`。
-
-默认 CPU/int8，普通调用不下载模型。ASR 可能有错字，字幕也可能没有覆盖全片；未配置 ASR 时仍可获取其他材料。
-
-</details>
+可选依赖与本地模型准备见 [INSTALL.md](INSTALL.md#optional-speech-to-text)。已有字幕无需 ASR；未配置语音转录时仍可获取其他材料。
 
 ## 开发
 
