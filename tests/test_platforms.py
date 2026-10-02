@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import platforms
@@ -19,6 +20,7 @@ class PlatformsTest(unittest.TestCase):
         with self.assertRaises(platforms.Failure) as caught:
             platforms.select_subtitle(tracks)
         self.assertEqual(caught.exception.code, 'subtitle_ambiguous')
+        self.assertIn('en, zh', str(caught.exception))
         self.assertIsNone(platforms.select_subtitle([tracks[-1]]))
 
     def test_quality_and_required_audio(self):
@@ -32,6 +34,23 @@ class PlatformsTest(unittest.TestCase):
         self.assertEqual(platforms.select_formats(tracks, want_video=False)[0]['url'], 'audio')
         portrait = [{'url': 'p', 'width': 1080, 'height': 1920, 'has_video': True, 'has_audio': True}]
         self.assertEqual(platforms.select_formats(portrait)[0]['url'], 'p')
+
+    def test_expected_audio_prevents_silent_video_delivery(self):
+        resolved = {'metadata': {'audio_expected': True}, 'formats': [
+            {'url': 'https://example.test/video', 'has_video': True, 'has_audio': False}]}
+        with patch.object(platforms, 'download_file') as fetch:
+            with self.assertRaises(platforms.Failure) as caught:
+                platforms.download(resolved, 'unused')
+        self.assertEqual(caught.exception.code, 'no_audio')
+        fetch.assert_not_called()
+        resolved['metadata']['audio_expected'] = None
+        resolved['diagnostics'] = [{'stage': 'media', 'code': 'audio_unavailable',
+                                    'message': 'Audio availability could not be verified.'}]
+        with patch.object(platforms, 'download_file') as fetch:
+            with self.assertRaises(platforms.Failure) as caught:
+                platforms.download(resolved, 'unused')
+        self.assertEqual(caught.exception.code, 'audio_unavailable')
+        fetch.assert_not_called()
 
     def test_video_resolution_then_fps_then_bitrate(self):
         base = {'url': '30fps', 'width': 1920, 'height': 1080,

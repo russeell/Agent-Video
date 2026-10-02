@@ -143,13 +143,17 @@ export AGENT_VIDEO_ASR_MODEL="$HOME/.cache/agent-video/models/faster-whisper-sma
 | 通用 HTTP / HTML / HLS | 本地真实 HTTP 样本验证直链、单个 video/source、TS 和 fMP4 点播 HLS、master 变体及音轨 / 时长；不是任意网页或任意 HLS 支持 |
 | 腾讯视频（实验） | [公开短视频 q326831cny0](https://v.qq.com/x/page/q326831cny0.html) 匿名完整下载和抽帧通过：1280×720、215.958秒、H.264 + AAC；不推广到所有腾讯内容 |
 | TikTok（实验） | 公开样本信息、媒体候选与 12 段字幕获取通过；视频下载尚未实测 |
-| YouTube（实验） | 仅公开 player response 的信息、字幕及直接媒体地址路径；本轮信息可读，字幕空响应返回 invalid_subtitles，保存遇播放器挑战，内容未验证、未交付视频。不处理播放器签名 / JS challenge，暂无成功线上下载验收 |
+| YouTube（实验） | 自研网页信息与原生播放器请求，字幕、直链和非加密点播 HLS。hkJFPUKTUwk 取得1659段中文字幕；py5B55ywvh0 Shorts 完整下载1080×1920 VP9 + AAC双声道、144.056秒，全片解码通过。另验英文人工与自动字幕；文字追问、高清补帧和重复保存复用通过 |
 | Douyin（实验） | 仅公开页面嵌入信息路径；未通过真实样本验收，挑战页面可能无法读取 |
 | 本地 ASR（可选） | small / CPU / int8 实测英文真人语音、中文合成语音及15秒中文真人教程口播，区间时间和文字稿复用通过；静音音轨返回 no_speech，无音轨返回 no_audio，仍交付其他材料。中文有错字；真人样本仅核对语言与主题，未做准确率评估 |
 
 通用路径支持公开媒体直链、单个 HTML video/source 和基础非加密 VOD HLS（含 TS、fMP4 初始化段和 master 变体）。多视频网页、JS 动态播放器、HLS 独立音轨组 / 字节范围 / discontinuity / 加密 / 直播、MPD、跨调用断点续传仍未支持；返回具体诊断。腾讯只接单视频 `/x/page/VID.html` 或 `/x/cover/CID/VID.html`，不遍历整剧集，不补齐试看，不处理 DRM。以上是少量样本验证，不能推断平台所有链接均可用。
 
 不处理直播、DRM、账号批量、图集、评论正文、自动翻译、说话人分离或内置全视频 OCR。平台接口变化、地区、网络和认证条件可能影响获取。遇到需要尚未实现的平台挑战时返回具体限制，不暗中调用外部下载项目。
+
+YouTube 的信息请求只读取网页；文字或媒体请求共享一次 visionOS 播放器请求，字幕成功时不下载整段视频。媒体选择包含 HLS 高清变体，外置音轨与画面分别获取，再无损合并，优先明确标记的原声。下载请求不启动 ASR。当前未实现需要 JavaScript 签名、PO token 或登录验证的其他获取路径；公开视频也可能受地区或访问条件限制，不保证每条链接可用。
+
+多语言字幕不一定能证明原语音语言，平台默认字幕也可能是翻译。原语言未知时诊断会列出可用语言，可用 `--language zh` 等明确选择，并在追问中沿用。文字时间来自平台字幕；自动字幕可能有错字或超出页面标称时长的结束时间。hkJFPUKTUwk 的中文字幕到70:08.137结束，视频标称71:29，末尾约81秒没有字幕，不能视为全部声音的完整转写。
 
 ## 测试
 
@@ -163,4 +167,4 @@ export AGENT_VIDEO_ASR_MODEL="$HOME/.cache/agent-video/models/faster-whisper-sma
 
 ## 参考
 
-设计参考 [yt-dlp](https://github.com/yt-dlp/yt-dlp)、[claude-video](https://github.com/bradautomates/claude-video)、[claude-real-video](https://github.com/HUANGCHIHHUNGLeo/claude-real-video)、[BBDownT](https://github.com/LOVAHE/BBDownT) 和 [F2](https://github.com/Johnserf-Seed/f2) 的职责拆分与材料获取思路；[Video-Browser](https://github.com/chrisx599/Video-Browser) 的候选筛选与渐进阅读仅参考思路，未移植代码。以上不是运行依赖。源码移植或改编涉及的许可与署名随相应文件保留。
+设计参考 [yt-dlp](https://github.com/yt-dlp/yt-dlp)、[youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api)、[claude-video](https://github.com/bradautomates/claude-video)、[claude-real-video](https://github.com/HUANGCHIHHUNGLeo/claude-real-video)、[BBDownT](https://github.com/LOVAHE/BBDownT) 和 [F2](https://github.com/Johnserf-Seed/f2) 的职责拆分与材料获取思路；[Video-Browser](https://github.com/chrisx599/Video-Browser) 的候选筛选与渐进阅读仅参考思路，未移植代码。以上不是运行依赖。源码移植或改编涉及的许可与署名随相应文件保留。

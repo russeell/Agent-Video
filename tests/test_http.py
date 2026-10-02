@@ -14,6 +14,35 @@ import platforms
 
 
 class HTTPTests(unittest.TestCase):
+    def test_json_post_preserves_body_and_header_boundaries(self):
+        observed = []
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers['Content-Length']))
+                observed.append((json.loads(body), self.headers.get('Content-Type'),
+                                 self.headers.get('Authorization'), self.headers.get('Cookie')))
+                payload = b'{"ok":true}'
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+            def log_message(self, *args):
+                pass
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f'http://127.0.0.1:{server.server_port}/player'
+            result = platforms.read_json(url, data=json.dumps({'videoId': 'test'}).encode(),
+                                         headers={'Content-Type': 'application/json',
+                                                  'Authorization': 'secret', 'Cookie': 'secret'})
+            self.assertEqual(result, {'ok': True})
+            self.assertEqual(observed, [({'videoId': 'test'}, 'application/json', None, None)])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
     def test_http_cookie_domain_and_atomic_download(self):
         observed = []
         class Handler(http.server.BaseHTTPRequestHandler):

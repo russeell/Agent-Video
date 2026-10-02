@@ -50,7 +50,7 @@ def _opener(cookies=None):
                                       urllib.request.HTTPSHandler(context=context))
 
 
-def request(url, *, headers=None, cookies=None, attempts=3):
+def request(url, *, headers=None, cookies=None, attempts=3, data=None):
     """Open HTTP, optionally letting a full-body download own its retries."""
     if urllib.parse.urlsplit(url).scheme not in ('http', 'https'):
         raise Failure('invalid_url', 'Only HTTP(S) resource addresses are supported.')
@@ -58,7 +58,7 @@ def request(url, *, headers=None, cookies=None, attempts=3):
                 if k.lower() not in ('cookie', 'authorization', 'proxy-authorization')}
     for attempt in range(attempts):
         try:
-            return _opener(cookies).open(urllib.request.Request(url, headers={'User-Agent': UA, **supplied}), timeout=30)
+            return _opener(cookies).open(urllib.request.Request(url, data=data, headers={'User-Agent': UA, **supplied}), timeout=30)
         except urllib.error.HTTPError as exc:
             exc.close()
             if exc.code in (401, 403):
@@ -74,17 +74,17 @@ def request(url, *, headers=None, cookies=None, attempts=3):
         time.sleep(.25 * (attempt + 1))
 
 
-def read_text(url, *, headers=None, cookies=None):
+def read_text(url, *, headers=None, cookies=None, data=None):
     try:
-        with request(url, headers=headers, cookies=cookies) as response:
+        with request(url, headers=headers, cookies=cookies, data=data) as response:
             return response.read().decode('utf-8-sig', errors='replace')
     except (OSError, http.client.HTTPException):
         raise Failure('network_failed', 'HTTP response could not be completely read.', 'Retry acquisition later.') from None
 
 
-def read_json(url, *, headers=None, cookies=None):
+def read_json(url, *, headers=None, cookies=None, data=None):
     try:
-        return json.loads(read_text(url, headers=headers, cookies=cookies))
+        return json.loads(read_text(url, headers=headers, cookies=cookies, data=data))
     except ValueError:
         raise Failure('parse_failed', 'The platform returned unrecognized JSON.', 'Retry later; the platform response may have changed.') from None
 
@@ -141,7 +141,9 @@ def select_subtitle(candidates, language=None, original_language=None):
         if not candidates:
             raise Failure('subtitle_language_unavailable', f'No subtitle matches language {target}.', 'Choose another available language.')
     elif len({c.get('language') for c in candidates}) > 1:
-        raise Failure('subtitle_ambiguous', 'Subtitle language is unknown and multiple languages are available.', 'Specify --language using an available subtitle language.')
+        languages = ', '.join(sorted({c.get('language') for c in candidates if c.get('language')}))
+        raise Failure('subtitle_ambiguous', 'Original speech language is unknown; available subtitles: ' + languages + '.',
+                      'Specify --language for the requested transcript; subtitle defaults may be translations.')
     ranks = {'platform_manual': 0, 'platform_auto': 1, 'platform_unknown': 2}
     return min(candidates, key=lambda c: ranks.get(c.get('origin'), 2))
 
@@ -183,6 +185,14 @@ def select_formats(formats, *, want_video=True, quality='auto', width=768):
 
 def download(resolved, directory, *, want_video=True, quality='auto', width=768, cookies=None, video_path=None):
     selected = select_formats(resolved['formats'], want_video=want_video, quality=quality, width=width)
+    expected_audio = (want_video != 'frames' and resolved.get('metadata', {}).get('audio_expected') is True)
+    if want_video != 'frames' and all(f.get('has_audio') is False for f in selected):
+        audio_error = next((d for d in resolved.get('diagnostics', []) if d.get('stage') == 'media'
+                            and d.get('code') in ('audio_unavailable', 'audio_ambiguous')), None)
+        if audio_error:
+            raise Failure(audio_error['code'], audio_error['message'], audio_error.get('next_action'))
+        if expected_audio:
+            raise Failure('no_audio', 'The video has an expected audio track, but no usable original audio stream was obtained.')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     paths = []
@@ -222,7 +232,7 @@ def download(resolved, directory, *, want_video=True, quality='auto', width=768,
         actual = media.probe(final)
         if want_video and not actual['video']:
             raise Failure('invalid_media', 'Downloaded media has no video stream.')
-        if (not want_video or any(f.get('has_audio') for f in selected)) and not actual['audio']:
+        if (expected_audio or not want_video or any(f.get('has_audio') for f in selected)) and not actual['audio']:
             raise Failure('invalid_media', 'Downloaded media is missing the expected audio stream.')
         expected = resolved.get('metadata', {}).get('duration')
         if expected and actual['duration'] < expected - max(2, expected * .03):
