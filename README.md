@@ -1,0 +1,95 @@
+# Agent Video
+
+**Let your agent watch videos.**
+
+给 Agent 一个视频链接或本地文件，让它按问题获取文字、画面、音频、视频和信息。所有材料保存在同一个结果目录，方便继续追问和直接交付文件。
+
+平台解析与下载由本项目实现，不需要安装 yt-dlp、F2 或 BBDownT。FFmpeg / ffprobe 用于底层媒体处理；本地语音转录可选。
+
+> 当前为最小可用的 v0.1 MVP。优先本地文件与已验证的 B 站路径，其他平台属于实验支持。
+
+## 安装
+
+需要 Python 3.11+。在项目目录创建隔离环境并安装：
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+```
+
+将 FFmpeg 和 ffprobe 加入 PATH。媒体获取、合并、抽帧和音频提取按需使用它们；只读取平台信息或字幕通常不需要解码器。Windows 使用 `.venv\Scripts\python.exe` 替代下文的 Python 路径。
+
+让宿主 Agent 加载本目录的 [SKILL.md](SKILL.md)，并使用项目环境中的 Python。不要把本机开发 Skill 当作产品安装内容。
+
+## 使用
+
+```bash
+# 文字稿，附带可取得的视频信息
+.venv/bin/python scripts/watch.py "/path/to/video.mp4"
+
+# 看画面、取信息或直接拿文件
+.venv/bin/python scripts/watch.py "<video-url>" --get frames --max-frames 6
+.venv/bin/python scripts/watch.py "<video-url>" --get info
+.venv/bin/python scripts/watch.py "<video-url>" --get video,audio
+
+# 用返回的 manifest 路径继续补取
+.venv/bin/python scripts/watch.py --evidence "/path/to/manifest.json" --get frames --start 01:20 --end 01:35
+.venv/bin/python scripts/watch.py --evidence "/path/to/manifest.json" --get frames --at 01:23 --width 1600
+.venv/bin/python scripts/watch.py --evidence "/path/to/manifest.json" --get video
+```
+
+`--get` 支持 `info,transcript,frames,audio,video` 的组合，默认 `transcript`。没有字幕时仅在 ASR 已配置后转录；程序不自动改成抽帧，Agent 根据问题决定下一步。完整参数见 `--help`。
+
+默认结果保存在当前目录 `.agent-video/`。stdout 是短 JSON，包含状态、manifest 和材料路径；长文字、图片和媒体都在文件里。已有材料优先复用，只有缺少或不满足要求时才补取。
+
+- 文字稿来自字幕或语音转录；简介、弹幕和抽样硬字幕不会冒充完整文字稿。
+- 帧和文字时间相对原视频，帧同时记录请求和实际时间。
+- `auto` 优先已有完整文件；新视频默认在 1080p 预算内选择。`--quality source` 要求最高可取得质量，不代表上传原始母版。
+- B 站一次取一个分 P，默认 P1；可使用 URL 的 `p` 或 `--part`，继续 evidence 时仍是同一部分。
+- 用户原文件只读；结果目录由用户决定保留或删除，同一结果目录串行调用。
+- Cookie 仅接受显式 `--cookies` 文件，不读取浏览器凭据；不要提交凭据和运行结果。
+
+退出码：`0` 请求完成，`2` 部分成功，`1` 无可用材料，`64` 参数错误。部分成功时先使用已有材料，并查看 `diagnostics` 的原因与下一步。
+
+## 可选语音转录
+
+```bash
+.venv/bin/python -m pip install -e '.[asr]'
+```
+
+事先准备 faster-whisper 支持的本地模型目录，并设置：
+
+```bash
+export AGENT_VIDEO_ASR_MODEL="/absolute/path/to/whisper-model"
+```
+
+默认 CPU / int8，建议从多语言 small 模型开始。普通读取不会下载模型；未配置时仍可取得信息、字幕、画面和媒体。区间转录只处理目标音频段。
+
+## 验证与限制
+
+2026-10-03 在 macOS、Python 3.12、FFmpeg 8.0.1 验证：
+
+| 来源 / 能力 | 实际结果 |
+|---|---|
+| 本地文件 | 信息、同名字幕、定点 / 区间帧、音视频导出和跨轮复用通过 |
+| Bilibili | 公开多 P 样本明确 P1；匿名信息与完整音视频下载 / 合并通过；该样本字幕需要登录 |
+| TikTok（实验） | 公开样本信息、媒体候选与 12 段字幕获取通过；视频下载尚未实测 |
+| YouTube（实验） | 仅公开 player response 的信息、字幕及直接媒体地址路径；不处理播放器签名 / JS challenge，暂无成功线上下载验收 |
+| Douyin（实验） | 仅公开页面嵌入信息路径；未通过真实样本验收，挑战页面可能无法读取 |
+| 本地 ASR（可选） | 音频裁剪与时间偏移已测，未运行真实模型，效果尚未验证 |
+
+分段 HLS / MPD 流、跨调用断点续传暂不支持；已取得的直接音视频轨可下载并合并。已知限制会返回诊断。以上是少量样本验证，不能推断平台所有链接均可用。
+
+不处理直播、DRM、账号批量、图集、评论正文、自动翻译、说话人分离或全视频 OCR。平台接口变化、地区、网络和认证条件可能影响获取。遇到需要尚未实现的平台挑战时返回具体限制，不暗中调用外部下载项目。
+
+## 测试
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+默认测试离线，使用临时合成媒体；需 FFmpeg / ffprobe 的测试在缺失时明确跳过。网络和真实 ASR 测试单独验证，不在每次测试中下载视频或大模型。
+
+## 参考
+
+设计参考 [yt-dlp](https://github.com/yt-dlp/yt-dlp)、[claude-video](https://github.com/bradautomates/claude-video)、[claude-real-video](https://github.com/HUANGCHIHHUNGLeo/claude-real-video)、[BBDownT](https://github.com/LOVAHE/BBDownT) 和 [F2](https://github.com/Johnserf-Seed/f2) 的职责拆分与材料获取思路。这些不是运行依赖。源码移植或改编涉及的许可与署名随相应文件保留。

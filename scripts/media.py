@@ -1,8 +1,9 @@
 """Local evidence processing. No model imports or network access at import time."""
 from __future__ import annotations
 
-import hashlib
 import html
+from functools import lru_cache
+from contextlib import contextmanager
 import json
 import math
 import os
@@ -63,7 +64,7 @@ def run(args, timeout=300):
         proc = subprocess.Popen([str(a) for a in args], stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, text=True)
     except FileNotFoundError:
-        raise Failure('missing_dependency', f'{args[0]} is not installed.') from None
+        raise Failure('dependency_missing', f'{args[0]} is not installed.') from None
     try:
         out, err = proc.communicate(timeout=timeout)
     except (subprocess.TimeoutExpired, KeyboardInterrupt):
@@ -77,7 +78,7 @@ def run(args, timeout=300):
             raise
         raise Failure('timeout', f'{Path(str(args[0])).name} exceeded {timeout}s.') from None
     if proc.returncode:
-        raise Failure('process_failed', safe_message(err or out))
+        raise Failure('processing_failed', safe_message(err or out))
     return out, err
 
 
@@ -92,6 +93,9 @@ def probe(path):
     data['duration'] = float(fmt.get('duration') or max(
         (float(s.get('duration') or 0) for s in streams), default=0))
     data['start_time'] = float(fmt.get('start_time') or 0)
+    # Matroska DURATION stores the end timestamp, unlike MP4 duration.
+    if 'matroska' in fmt.get('format_name', ''):
+        data['duration'] = max(0, data['duration'] - data['start_time'])
     data['video'] = next((s for s in streams if s['codec_type'] == 'video'
                           and not s.get('disposition', {}).get('attached_pic')), None)
     data['audio'] = [s for s in streams if s['codec_type'] == 'audio']
@@ -99,16 +103,8 @@ def probe(path):
 
 
 def fingerprint(path):
-    path = Path(path).resolve()
-    before = path.stat()
-    digest = hashlib.sha256()
-    with path.open('rb') as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
-            digest.update(chunk)
-    after = path.stat()
-    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
-        raise Failure('source_changed', 'Source changed while computing its fingerprint.')
-    return {'size': after.st_size, 'mtime_ns': after.st_mtime_ns, 'sha256': digest.hexdigest()}
+    stat = Path(path).resolve().stat()
+    return {'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns}
 
 
 def audio_index(info, requested=None):
@@ -177,6 +173,13 @@ def parse_subtitles(text, ext):
                 if old_lines[-n:] == new_lines[:n]:
                     text = '\n'.join(new_lines[n:])
                     break
+            else:
+                # JSON3 often repeats a growing single line rather than whole lines.
+                old_words, new_words = previous['text'].split(), text.split()
+                for n in range(min(len(old_words), len(new_words)), 0, -1):
+                    if old_words[-n:] == new_words[:n]:
+                        text = ' '.join(new_words[n:])
+                        break
         if text:
             result.append({'start': start, 'end': end, 'text': text})
     return result
@@ -198,78 +201,131 @@ def transcript_files(directory, segments, language, origin, source_range):
 
 
 def frames(path, directory, times, width, info):
+    """Yield completed frames immediately; a later failure never discards them."""
     if not info['video']:
         raise Failure('no_video', 'The selected media has no video stream.')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    result = []
     for requested in times:
         dest = directory / f'{uuid.uuid4().hex[:10]}.jpg'
         filters = f"select=gte(t\\,{info['start_time'] + requested:.9f}),showinfo"
         if width:
             filters += f",scale=w='min({width},iw)':h=-1"
         try:
+            if info.get('duration') and requested >= info['duration']:
+                raise Failure('frame_unavailable', f'Frame time {requested:.3f}s is outside the media duration.')
+            if requested < 0 or not math.isfinite(requested):
+                raise Failure('frame_unavailable', 'Frame time must be finite and nonnegative.')
             _, log = run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'info', '-y',
                           '-copyts', '-ss', max(0, requested - 1), '-i', path,
                           '-map', f"0:{info['video']['index']}", '-vf', filters,
                           '-frames:v', '1', '-fps_mode', 'vfr', '-q:v', '2', dest], timeout=120)
             match = re.search(r'\bn:\s*0\s+pts:.*?pts_time:([-\d.e+]+).*?\bs:(\d+)x(\d+)', log)
-            if not dest.exists() or not match:
+            if not dest.exists() or not dest.stat().st_size or not match:
                 raise Failure('frame_unavailable', f'No decoded frame at or after {requested:.3f}s.')
-            result.append({'path': dest, 'requested_time': requested,
-                           'actual_time': max(0, float(match[1]) - info['start_time']),
-                           'width': min(width, int(match[2])) if width else int(match[2]),
-                           'source_width': int(match[2]), 'source_height': int(match[3])})
+            image = probe(dest)['video']
+            actual = float(match[1]) - info['start_time']
+            yield {'path': dest, 'requested_time': requested, 'actual_time': actual,
+                   'width': image['width'], 'height': image['height'],
+                   'source_width': int(match[2]), 'source_height': int(match[3])}
+        except Failure as exc:
+            dest.unlink(missing_ok=True)
+            yield {'requested_time': requested,
+                   'error': {'code': exc.code, 'message': str(exc), 'next_action': exc.next_action}}
         except BaseException:
             dest.unlink(missing_ok=True)
             raise
-    return result
+
+
+@contextmanager
+def _output(path, dest):
+    """Validate a temporary output before replacing any existing result."""
+    dest = Path(dest)
+    if Path(path).resolve() == dest.resolve() or (dest.exists() and os.path.samefile(path, dest)):
+        raise Failure('unsafe_path', 'Output must not overwrite the source media.')
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name('.' + dest.stem + '-' + uuid.uuid4().hex + dest.suffix)
+    try:
+        yield tmp
+        if not tmp.exists() or not tmp.stat().st_size:
+            raise Failure('processing_failed', 'Media processing produced no output.')
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def _range(start, end):
+    if not math.isfinite(start) or start < 0 or (end is not None and
+            (not math.isfinite(end) or end <= start)):
+        raise Failure('invalid_range', 'Media range must have a nonnegative start and a later end.')
 
 
 def export_audio(path, dest, info, start=0, end=None, track=None, asr=False):
     index = audio_index(info, track)
+    _range(start, end)
     clipped = start != 0 or end is not None
     args = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-ss', start, '-i', path]
     if end is not None:
         args += ['-t', end - start]
     args += ['-map', f'0:{index}', '-vn']
+    if clipped or asr:
+        # Preserve leading silence when the audio stream begins after the source clock.
+        args += ['-af', 'aresample=async=1:first_pts=0']
     args += ['-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le'] if asr else (
         ['-c:a', 'flac'] if clipped else ['-c:a', 'copy'])
-    dest = Path(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    run(args + [dest], timeout=600)
-    actual = probe(dest)
-    return {'audio_track': index, 'transcoded': asr or clipped,
-            'duration': actual['duration']}
+    with _output(path, dest) as tmp:
+        run(args + [tmp], timeout=600)
+        actual = probe(tmp)
+        if not actual['audio']:
+            raise Failure('processing_failed', 'Audio output contains no audio stream.')
+    return {'audio_track': index, 'transcoded': asr or clipped, 'duration': actual['duration']}
+
+
+@lru_cache(maxsize=1)
+def _video_encoder():
+    listing, _ = run(['ffmpeg', '-hide_banner', '-encoders'], timeout=30)
+    if re.search(r'^ V\S*\s+libx264\s', listing, re.M):
+        return ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18']
+    if re.search(r'^ V\S*\s+mpeg4\s', listing, re.M):
+        return ['-c:v', 'mpeg4', '-q:v', '2']
+    raise Failure('dependency_missing', 'FFmpeg needs a libx264 or mpeg4 video encoder.')
 
 
 def export_video(path, dest, info, start=0, end=None, track=None):
     if not info['video']:
         raise Failure('no_video', 'Cannot deliver audio-only media as a video.')
-    dest = Path(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if start == 0 and end is None and track is None:
-        shutil.copy2(path, dest)
-        return {'transcoded': False, 'duration': info['duration']}
-    args = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-ss', start, '-i', path]
-    if end is not None:
-        args += ['-t', end - start]
-    args += ['-map', f"0:{info['video']['index']}"]
-    if info['audio']:
-        args += ['-map', f'0:{audio_index(info, track)}']
-    elif track is not None:
-        audio_index(info, track)
-    args += ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-c:a', 'aac', dest]
-    run(args, timeout=1800)
-    return {'transcoded': True, 'duration': probe(dest)['duration']}
+    _range(start, end)
+    clipped = start != 0 or end is not None
+    index = audio_index(info, track) if info['audio'] or track is not None else None
+    with _output(path, dest) as tmp:
+        if not clipped and track is None:
+            shutil.copy2(path, tmp)
+        else:
+            args = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-ss', start, '-i', path]
+            if end is not None:
+                args += ['-t', end - start]
+            args += ['-map', f"0:{info['video']['index']}"]
+            if index is not None:
+                args += ['-map', f'0:{index}']
+            args += (_video_encoder() + ['-fps_mode', 'vfr', '-c:a', 'aac']) if clipped else ['-c', 'copy']
+            run(args + [tmp], timeout=1800)
+        actual = probe(tmp)
+        if not actual['video'] or (index is not None and not actual['audio']):
+            raise Failure('processing_failed', 'Video output is missing an expected stream.')
+    result = {'transcoded': clipped, 'duration': actual['duration']}
+    if index is not None:
+        result['audio_track'] = index
+    return result
 
 
 def asr_ready(model):
     import importlib.util
-    return bool(importlib.util.find_spec('faster_whisper')) and Path(model).is_dir()
+    return bool(model) and Path(model).is_dir() and bool(importlib.util.find_spec('faster_whisper'))
 
 
 def transcribe(path, info, start, end, language, track, model):
+    audio_index(info, track)
+    _range(start, end)
     if not asr_ready(model):
         raise Failure('asr_unavailable', 'Local ASR dependency or model directory is missing.',
                       'Install the asr extra and set AGENT_VIDEO_ASR_MODEL to a downloaded model directory.')
@@ -286,7 +342,7 @@ def transcribe(path, info, start, end, language, track, model):
         segment['start'] += start
         segment['end'] += start
     if not data['segments']:
-        raise Failure('no_speech_detected', 'ASR found no speech in the requested interval.')
+        raise Failure('no_speech', 'ASR found no speech in the requested interval.')
     return data
 
 

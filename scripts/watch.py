@@ -1,0 +1,538 @@
+"""One entry point for obtaining and reusing video evidence."""
+from __future__ import annotations
+import argparse
+import json
+import math
+import os
+from pathlib import Path
+import sys
+import uuid
+from urllib.parse import urlsplit, parse_qs
+
+if __package__:
+    from . import media, manifest
+else:
+    import media
+    import manifest
+
+
+KINDS = {'info', 'transcript', 'frames', 'audio', 'video'}
+
+
+class InputError(ValueError):
+    pass
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise InputError(message)
+
+
+def parser():
+    p = Parser(description='Get video evidence and reuse it in follow-up questions.',
+               epilog='Examples:\n  watch.py video.mp4 --get transcript,frames\n'
+               '  watch.py --evidence manifest.json --get frames --at 01:23 --width 1600\n'
+               '  watch.py --evidence manifest.json --get video',
+               formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('source', nargs='?')
+    p.add_argument('--evidence')
+    p.add_argument('--get', default='transcript')
+    p.add_argument('--out')
+    p.add_argument('--start')
+    p.add_argument('--end')
+    p.add_argument('--at')
+    p.add_argument('--max-frames', type=int, default=12)
+    p.add_argument('--width', type=int, default=768)
+    p.add_argument('--quality', choices=['auto', '1080p', 'source'], default='auto')
+    p.add_argument('--language')
+    p.add_argument('--audio-track', type=int)
+    p.add_argument('--part', type=int)
+    p.add_argument('--cookies')
+    return p
+
+
+def validate(args):
+    if bool(args.source) == bool(args.evidence):
+        raise InputError('Provide exactly one source or --evidence.')
+    if args.evidence and args.out:
+        raise InputError('--out cannot be combined with --evidence.')
+    args.kinds = list(dict.fromkeys(args.get.split(',')))
+    if not args.kinds or any(k not in KINDS for k in args.kinds):
+        raise InputError('--get accepts info,transcript,frames,audio,video.')
+    try:
+        args.begin = media.clock(args.start) if args.start is not None else 0.0
+        args.finish = media.clock(args.end) if args.end is not None else None
+        args.times = [media.clock(t) for t in args.at.split(',')] if args.at is not None else None
+    except ValueError as exc:
+        raise InputError(str(exc)) from None
+    if args.finish is not None and args.finish <= args.begin:
+        raise InputError('--end must be later than --start.')
+    if args.times is not None and ('frames' not in args.kinds or args.start is not None or args.end is not None):
+        raise InputError('--at requires frames and cannot be combined with --start/--end.')
+    if args.kinds == ['info'] and (args.start is not None or args.end is not None):
+        raise InputError('info-only does not accept a time interval.')
+    if args.max_frames < 1 or args.width < 0 or (args.times is not None and len(args.times) > args.max_frames):
+        raise InputError('Frame budget must be positive; width nonnegative; --at must fit the budget.')
+    if args.audio_track is not None and args.audio_track < 0:
+        raise InputError('--audio-track must be a nonnegative ffprobe stream index.')
+    if args.part is not None and args.part < 1:
+        raise InputError('--part must be positive.')
+    if args.cookies and not Path(args.cookies).is_file():
+        raise InputError('Cookie file does not exist.')
+    if args.source and urlsplit(args.source).scheme in ('http', 'https'):
+        url = urlsplit(args.source)
+        if args.part is not None and not (url.hostname == 'b23.tv' or (url.hostname or '').endswith('bilibili.com')):
+            raise InputError('--part is only applicable to Bilibili.')
+        linked_part = parse_qs(url.query).get('p', [None])[0]
+        if args.part is not None and linked_part is not None:
+            try:
+                conflict = int(linked_part) != args.part
+            except ValueError:
+                raise InputError('Invalid part in source URL.') from None
+            if conflict:
+                raise InputError('--part conflicts with the source URL part.')
+    if args.source and not urlsplit(args.source).scheme in ('http', 'https'):
+        if not Path(args.source).is_file():
+            raise InputError('Local source file does not exist.')
+        if args.part is not None:
+            raise InputError('--part is only applicable to Bilibili.')
+    return args
+
+
+def diagnostic(stage, exc):
+    aliases = {'missing_dependency': 'dependency_missing', 'process_failed': 'processing_failed',
+               'no_speech_detected': 'no_speech'}
+    code = getattr(exc, 'code', 'processing_failed')
+    return {'stage': stage, 'code': aliases.get(code, code),
+            'message': media.safe_message(exc), 'next_action': getattr(exc, 'next_action', None)}
+
+
+def local_subtitles(path):
+    candidates = []
+    for ext in ('vtt', 'srt', 'json'):
+        for candidate in sorted(path.parent.glob(path.stem + '*.' + ext)):
+            suffix = candidate.stem[len(path.stem):]
+            if suffix and not suffix.startswith('.'):
+                continue
+            language = suffix[1:] or None
+            if language in ('danmaku', 'live_chat'):
+                continue
+            candidates.append({'path': candidate, 'ext': ext, 'language': language, 'origin': 'local_subtitle'})
+    return candidates
+
+
+def choose_local(candidates, language):
+    if language:
+        candidates = [c for c in candidates if c['language'] == language or
+                      (c['language'] and c['language'].split('-')[0] == language.split('-')[0])]
+    else:
+        plain = [c for c in candidates if c['language'] is None]
+        if plain:
+            candidates = plain
+        elif len({c['language'] for c in candidates}) > 1:
+            raise media.Failure('subtitle_language_ambiguous', 'Choose --language from: ' +
+                                ', '.join(sorted({c['language'] for c in candidates})))
+    return candidates[0] if candidates else None
+
+
+class Watch:
+    def __init__(self, args):
+        self.args = args
+        self.result = []
+        self.diagnostics = []
+        self.resolved = None
+        self.media_resolved = False
+        self.info = None
+        self.local = None
+        self.completed = set()
+        if args.evidence:
+            try:
+                self.path, self.data = manifest.load(args.evidence)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                raise InputError(str(exc)) from None
+            source = self.data['source']
+            if args.part is not None and args.part != source.get('part'):
+                raise InputError('An evidence manifest has a fixed source part.')
+            if source.get('platform') == 'local':
+                self.local = Path(source['path'])
+                if not self.local.is_file():
+                    raise InputError('Original local source no longer exists.')
+                current = media.fingerprint(self.local)
+                if current != source.get('fingerprint'):
+                    self.data['artifacts'] = []
+                    source['fingerprint'] = current
+        else:
+            if urlsplit(args.source).scheme in ('http', 'https'):
+                source = {'url': args.source}
+            else:
+                self.local = Path(args.source).resolve()
+                source = {'platform': 'local', 'id': self.local.stem, 'path': str(self.local),
+                          'fingerprint': media.fingerprint(self.local)}
+            directory = (Path(args.out or '.agent-video') / uuid.uuid4().hex[:12]).resolve()
+            directory.mkdir(parents=True)
+            self.path = directory / 'manifest.json'
+            self.data = {'schema_version': 1, 'source': source, 'artifacts': []}
+        self.directory = self.path.parent
+        self.save()
+
+    def save(self):
+        self.data['diagnostics'] = self.diagnostics
+        media.atomic_json(self.path, self.data)
+
+    def add(self, kind, path, **fields):
+        artifact = manifest.add(self.data, self.directory, kind, path, **fields)
+        self.save()
+        return artifact
+
+    def deliver(self, artifact):
+        if artifact['id'] not in {a['id'] for a in self.result}:
+            self.result.append(artifact)
+
+    def fail(self, stage, exc):
+        self.diagnostics.append(diagnostic(stage, exc))
+        self.save()
+
+    def resolve(self, media_needed=False):
+        if self.resolved is None or (media_needed and not self.media_resolved):
+            if __package__:
+                from . import platforms
+            else:
+                import platforms
+            print('Resolving video source…', file=sys.stderr)
+            needs = self.args.kinds + (['media'] if media_needed else [])
+            previous = self.resolved
+            refreshed = platforms.resolve(self.data['source']['url'], part=self.data['source'].get('part', self.args.part),
+                                          cookies=self.args.cookies, need=needs)
+            if previous:
+                refreshed['subtitles'] = previous.get('subtitles', refreshed.get('subtitles', []))
+                refreshed['metadata'] = {**previous.get('metadata', {}), **refreshed.get('metadata', {})}
+            self.resolved = refreshed
+            self.media_resolved = bool(set(needs) & {'video', 'audio', 'frames', 'media'})
+            self.data['source'] = self.resolved['source']
+            for item in self.resolved.get('diagnostics', []):
+                if item not in self.diagnostics:
+                    self.diagnostics.append(item)
+            self.save()
+        return self.resolved
+
+    def metadata(self):
+        existing = next((a for a in self.data['artifacts'] if a['type'] == 'info'), None)
+        if existing:
+            self.deliver(existing)
+            self.completed.add('info')
+            return
+        if self.local:
+            self.info = media.probe(self.local)
+            metadata = dict.fromkeys(['author', 'description', 'published_at', 'thumbnail', 'views', 'likes', 'comments'])
+            metadata.update(platform='local', id=self.local.stem, source=str(self.local), title=self.local.name,
+                            duration=self.info['duration'])
+        else:
+            metadata = dict(self.resolve()['metadata'])
+        from datetime import datetime, timezone
+        metadata['collected_at'] = datetime.now(timezone.utc).isoformat()
+        path = self.directory / 'metadata.json'
+        media.atomic_json(path, metadata)
+        self.deliver(self.add('info', path))
+        self.completed.add('info')
+
+    def duration(self):
+        if self.info:
+            return self.info['duration']
+        full = [a['source_range']['end'] for a in self.data['artifacts']
+                if a.get('internal') and a.get('source_range', {}).get('end') is not None]
+        if full:
+            return max(full)
+        for artifact in self.data['artifacts']:
+            if artifact['type'] == 'info':
+                value = json.loads(manifest.artifact_path(self.directory, artifact).read_text()).get('duration')
+                if value is not None:
+                    return float(value)
+        return None
+
+    def interval(self):
+        return self.args.begin, self.args.finish if self.args.finish is not None else self.duration()
+
+    def matching(self, kind, start, end):
+        for a in self.data['artifacts']:
+            if a['type'] != kind or not manifest.covers(a, start, end):
+                continue
+            if kind in ('transcript', 'audio', 'video') and self.args.audio_track is not None and a.get('audio_track') != self.args.audio_track:
+                continue
+            if kind == 'transcript' and self.args.language and a.get('language') != self.args.language:
+                continue
+            if kind == 'video' and (a.get('frames_only') or
+                (self.args.quality != 'auto' and a.get('quality') not in (self.args.quality, 'source') and not a.get('external'))):
+                continue
+            return a
+        return None
+
+    def acquire(self, purpose):
+        if self.local:
+            return self.local, self.info or media.probe(self.local)
+        full_end = self.duration()
+        for kind in (['video', 'audio'] if purpose == 'audio' else ['video']):
+            for a in self.data['artifacts']:
+                if a['type'] != kind or not manifest.covers(a, 0, full_end):
+                    continue
+                if purpose == 'video' and a.get('frames_only'):
+                    continue
+                if purpose != 'audio' and self.args.quality != 'auto' and a.get('quality') not in (self.args.quality, 'source'):
+                    continue
+                path = manifest.artifact_path(self.directory, a)
+                info = media.probe(path)
+                if purpose == 'audio' and not info['audio']:
+                    continue
+                if purpose == 'frames' and a.get('quality') != 'source':
+                    if not info['video'] or self.args.width == 0 or info['video']['width'] < self.args.width:
+                        continue
+                if self.args.audio_track is not None:
+                    media.audio_index(info, self.args.audio_track)
+                return path, info
+        resolved = self.resolve(media_needed=True)
+        if __package__:
+            from . import platforms
+        else:
+            import platforms
+        print('Obtaining required media…', file=sys.stderr)
+        path = Path(platforms.download(resolved, self.directory / ('video' if purpose != 'audio' else 'audio'),
+                                      want_video={'video': True, 'frames': 'frames', 'audio': False}[purpose],
+                                      quality=self.args.quality, width=self.args.width, cookies=self.args.cookies)).resolve()
+        if not path.is_file() or path.stat().st_size == 0:
+            raise media.Failure('invalid_media', 'Download did not produce a nonempty file.')
+        info = media.probe(path)
+        if purpose != 'audio' and not info['video']:
+            raise media.Failure('no_video', 'Downloaded media has no video stream.')
+        if purpose == 'audio':
+            media.audio_index(info, self.args.audio_track)
+        fields = {'source_range': {'start': 0, 'end': info['duration']}, 'quality': 'source' if purpose == 'frames' and self.args.width == 0 else self.args.quality, 'internal': True}
+        if purpose == 'frames':
+            fields['frames_only'] = True
+        if info['video']:
+            fields['width'] = info['video']['width']
+            fields['height'] = info['video']['height']
+        if info['audio']:
+            fields['audio_track'] = media.audio_index(info, self.args.audio_track)
+        self.add('audio' if purpose == 'audio' else 'video', path, **fields)
+        return path, info
+
+    def transcript(self, shared=None):
+        start, end = self.interval()
+        existing = self.matching('transcript', start, end)
+        if existing:
+            span = existing['source_range']
+            if span == {'start': start, 'end': end}:
+                self.deliver(existing)
+                return
+            data = json.loads(manifest.artifact_path(self.directory, existing).read_text())
+            segments = media.subtitle_range(data['segments'], start, end)
+            language, origin = existing.get('language'), existing.get('origin')
+            track = existing.get('audio_track')
+        else:
+            candidate = None
+            if self.local:
+                candidate = choose_local(local_subtitles(self.local), self.args.language)
+            else:
+                resolved = self.resolve()
+                if __package__:
+                    from . import platforms
+                else:
+                    import platforms
+                candidate = platforms.select_subtitle(resolved.get('subtitles', []), language=self.args.language,
+                                                      original_language=resolved.get('metadata', {}).get('original_language', resolved.get('metadata', {}).get('language')))
+            subtitle_error = None
+            if candidate:
+                try:
+                    text = candidate['path'].read_text(encoding='utf-8') if self.local else platforms.fetch_subtitle(candidate, cookies=self.args.cookies)
+                    all_segments = media.parse_subtitles(text, candidate['ext'])
+                    if not all_segments:
+                        raise media.Failure('subtitle_absent', 'The subtitle track contains no valid speech segments.')
+                    segments = media.subtitle_range(all_segments, start, end)
+                    language, origin, track = candidate.get('language'), candidate.get('origin', 'platform_unknown'), None
+                except (ValueError, OSError, media.Failure) as exc:
+                    subtitle_error = exc
+                    candidate = None
+            if not candidate:
+                model = os.environ.get('AGENT_VIDEO_ASR_MODEL')
+                if not model or not media.asr_ready(model):
+                    if subtitle_error:
+                        raise subtitle_error
+                    prior = next((d for d in self.diagnostics if d.get('stage') in ('transcript', 'subtitles')
+                                  and d.get('code') not in ('subtitle_absent',)), None)
+                    if prior:
+                        raise media.Failure(prior['code'], prior['message'], prior.get('next_action'))
+                    raise media.Failure('subtitle_absent',
+                                        'No usable subtitle was obtained; local ASR is not configured.',
+                                        'Provide subtitles or prepare ASR and set AGENT_VIDEO_ASR_MODEL.')
+                path, info = shared if shared and shared[1]['audio'] else self.acquire('audio')
+                track = media.audio_index(info, self.args.audio_track)
+                data = media.transcribe(path, info, start, self.args.finish, self.args.language, track, model)
+                segments, language, origin = data['segments'], data['language'], 'asr'
+                end = self.args.finish if self.args.finish is not None else info['duration']
+        span = {'start': start, 'end': end}
+        path, readable = media.transcript_files(self.directory, segments, language, origin, span)
+        fields = {'source_range': span, 'language': language, 'origin': origin,
+                  'readable_path': str(readable.relative_to(self.directory))}
+        if track is not None:
+            fields['audio_track'] = track
+        self.deliver(self.add('transcript', path, **fields))
+
+    def frame_times(self, info):
+        if self.args.times is not None:
+            return list(dict.fromkeys(self.args.times))
+        start = self.args.begin
+        end = self.args.finish if self.args.finish is not None else info['duration']
+        if start >= info['duration'] or end <= start:
+            raise media.Failure('range_out_of_bounds', 'Requested interval is outside the source.')
+        count = self.args.max_frames
+        # Centers avoid the undecodable exact end and remain inside the requested range.
+        return [start + (end - start) * (i + 0.5) / count for i in range(count)]
+
+    def frames(self, shared):
+        path, info = shared
+        times = self.frame_times(info)
+        missing = []
+        for time in times:
+            existing = next((a for a in self.data['artifacts'] if a['type'] == 'frames' and
+                             abs(a.get('requested_time', -1) - time) < 0.000001 and
+                             a.get('width', 0) >= (min(self.args.width, info['video']['width']) if self.args.width else info['video']['width'])), None) if info['video'] else None
+            if existing:
+                self.deliver(existing)
+            else:
+                missing.append(time)
+        failures = False
+        for frame in media.frames(path, self.directory / 'frames', missing, self.args.width, info):
+            if frame.get('error'):
+                self.diagnostics.append({'stage': 'frames', **frame['error']})
+                self.save()
+                failures = True
+                continue
+            frame = dict(frame)
+            dest = frame.pop('path')
+            self.deliver(self.add('frames', dest, **frame))
+        if failures:
+            return False
+        return True
+
+    def export(self, kind, shared):
+        start, end = self.interval()
+        existing = self.matching(kind, start, end)
+        if existing and existing['source_range'] == {'start': start, 'end': end}:
+            if not (kind == 'video' and existing.get('external')):
+                self.deliver(existing)
+                return
+        path, info = shared
+        end = self.args.finish if self.args.finish is not None else info['duration']
+        if start >= info['duration']:
+            raise media.Failure('range_out_of_bounds', 'Requested interval begins beyond the source.')
+        track = media.audio_index(info, self.args.audio_track) if info['audio'] else None
+        suffix = path.suffix if kind == 'video' and start == 0 and self.args.finish is None else ('.mkv' if kind == 'video' else '.mka')
+        dest = self.directory / kind / (uuid.uuid4().hex[:10] + suffix)
+        function = media.export_video if kind == 'video' else media.export_audio
+        details = function(path, dest, info, start, self.args.finish, self.args.audio_track)
+        verified = media.probe(dest)
+        if not dest.stat().st_size or (kind == 'video' and not verified['video']):
+            raise media.Failure('invalid_media', 'Export does not contain the expected media.')
+        if kind == 'audio' or info['audio']:
+            media.audio_index(verified)
+        fields = {'source_range': {'start': start, 'end': end}, 'transcoded': details['transcoded']}
+        if track is not None:
+            fields['audio_track'] = track
+        if kind == 'video':
+            fields['quality'] = 'source' if self.local else self.args.quality
+        self.deliver(self.add(kind, dest, **fields))
+
+    def run(self):
+        print('Preparing evidence…', file=sys.stderr)
+        try:
+            self.metadata()
+        except InputError:
+            raise
+        except Exception as exc:
+            self.fail('info', exc)
+        # Merge dependent requests: one media fetch, richest requested material wins.
+        shared = None
+        wanted = set(self.args.kinds)
+        for kind in ('video', 'audio'):
+            if kind not in wanted:
+                continue
+            start, end = self.interval()
+            cached = self.matching(kind, start, end)
+            if cached and cached.get('source_range') == {'start': start, 'end': end}:
+                self.deliver(cached)
+                self.completed.add(kind)
+        if 'frames' in wanted and self.args.times is not None:
+            cached_frames = []
+            for time in dict.fromkeys(self.args.times):
+                cached = next((a for a in self.data['artifacts'] if a['type'] == 'frames' and
+                    abs(a.get('requested_time', -1) - time) < 0.000001 and
+                    a.get('width', 0) >= (min(self.args.width, a.get('source_width', self.args.width))
+                                         if self.args.width else a.get('source_width', math.inf))), None)
+                if cached:
+                    cached_frames.append(cached)
+            if len(cached_frames) == len(set(self.args.times)):
+                for cached in cached_frames:
+                    self.deliver(cached)
+                self.completed.add('frames')
+        need_visual = bool({'video', 'frames'} & (wanted - self.completed))
+        need_audio = 'audio' in wanted - self.completed
+        if need_visual or need_audio:
+            try:
+                shared = self.acquire('video' if 'video' in wanted or (need_visual and (need_audio or ('transcript' in wanted and media.asr_ready(os.environ.get('AGENT_VIDEO_ASR_MODEL'))))) else 'frames' if need_visual else 'audio')
+            except Exception as exc:
+                self.fail('media', exc)
+        for kind in self.args.kinds:
+            if kind in self.completed:
+                continue
+            try:
+                if kind == 'transcript':
+                    self.transcript(shared)
+                elif shared is None:
+                    continue
+                elif kind == 'frames':
+                    if not self.frames(shared):
+                        continue
+                else:
+                    self.export(kind, shared)
+                self.completed.add(kind)
+            except Exception as exc:
+                self.fail(kind, exc)
+        status = 'ok' if wanted <= self.completed else 'partial' if self.result else 'error'
+        self.data['last_request'] = {'get': self.args.kinds, 'start': self.args.begin, 'end': self.args.finish,
+                                     'at': self.args.times, 'status': status, 'artifact_ids': [a['id'] for a in self.result]}
+        self.save()
+        result = {'status': status, 'manifest': str(self.path),
+                  'artifacts': [{'type': a['type'], 'path': str(manifest.artifact_path(self.directory, a)),
+                                 **({'readable_path': str(manifest.artifact_path(self.directory, a, 'readable_path'))} if a.get('readable_path') else {})}
+                                for a in self.result], 'diagnostics': self.diagnostics}
+        return result, {'ok': 0, 'partial': 2, 'error': 1}[status]
+
+
+def main(argv=None):
+    watch = None
+    try:
+        args = validate(parser().parse_args(argv))
+        watch = Watch(args)
+        result, code = watch.run()
+    except (InputError, ValueError) as exc:
+        result, code = {'status': 'error', 'manifest': None, 'artifacts': [],
+                        'diagnostics': [diagnostic('arguments', exc)]}, 64
+    except KeyboardInterrupt:
+        if watch:
+            watch.fail('cancel', media.Failure('cancelled', 'Request was cancelled; completed evidence remains available.'))
+            watch.data['last_request'] = {'get': watch.args.kinds,
+                'status': 'partial' if watch.result else 'error', 'artifact_ids': [a['id'] for a in watch.result]}
+            watch.save()
+        result, code = {'status': 'partial' if watch and watch.result else 'error',
+                        'manifest': str(watch.path) if watch else None,
+                        'artifacts': [{'type': a['type'], 'path': str(manifest.artifact_path(watch.directory, a))}
+                                      for a in watch.result] if watch else [],
+                        'diagnostics': watch.diagnostics if watch else [{'stage': 'cancel', 'code': 'cancelled', 'message': 'Cancelled.', 'next_action': None}]}, 130
+    except Exception as exc:
+        result, code = {'status': 'error', 'manifest': str(watch.path) if watch else None,
+                        'artifacts': [], 'diagnostics': [diagnostic('source', exc)]}, 1
+    print(json.dumps(result, ensure_ascii=False, allow_nan=False))
+    return code
+
+
+if __name__ == '__main__':
+    sys.exit(main())

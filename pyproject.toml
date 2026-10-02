@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "agent-video"
 version = "0.1.0"
 description = "Let your agent watch videos: acquire timestamped evidence from videos."
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = ["truststore>=0.10"]
 
