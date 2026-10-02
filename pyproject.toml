@@ -9,7 +9,7 @@ description = "Let your agent watch videos: acquire timestamped evidence from vi
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.11"
-dependencies = ["truststore>=0.10"]
+dependencies = ["truststore>=0.10", "cryptography>=42.0"]
 
 [project.optional-dependencies]
 asr = ["faster-whisper>=1.2,<2"]

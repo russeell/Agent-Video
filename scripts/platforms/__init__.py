@@ -136,7 +136,7 @@ def fetch_subtitle(candidate, cookies=None):
 def select_formats(formats, *, want_video=True, quality='auto', width=768):
     if quality not in ('auto', '1080p', 'source'):
         raise Failure('invalid_quality', 'Quality must be auto, 1080p or source.')
-    audio = [f for f in formats if f.get('has_audio')]
+    audio = [f for f in formats if f.get('has_audio') or f.get('has_audio') is None]
     if not want_video:
         if not audio:
             raise Failure('no_audio', 'No downloadable actual audio stream is available.')
@@ -156,7 +156,7 @@ def select_formats(formats, *, want_video=True, quality='auto', width=768):
                     and max(f.get('width') or 0, f.get('height') or 0) <= 1920]
         selected = max(suitable, key=rank) if suitable else min(videos, key=rank)
     result = [selected]
-    if want_video != 'frames' and not selected.get('has_audio') and audio:
+    if want_video != 'frames' and selected.get('has_audio') is False and audio:
         result.append(max(audio, key=lambda f: (not f.get('has_video'), f.get('bitrate') or 0)))
     return result
 
@@ -169,10 +169,14 @@ def download(resolved, directory, *, want_video=True, quality='auto', width=768,
     token = uuid.uuid4().hex[:12]
     try:
         for index, candidate in enumerate(selected):
-            if candidate.get('protocol') in ('hls', 'dash') or candidate.get('ext') in ('m3u8', 'mpd'):
-                raise Failure('format_unsupported', 'Segmented streaming format is not implemented.', 'Use another available format or local media.')
+            if candidate.get('protocol') == 'hls' or candidate.get('ext') == 'm3u8':
+                from .generic import download_hls
+                paths.append(download_hls(candidate, directory / f'{token}-{index}.mkv', cookies=cookies))
+                continue
+            if candidate.get('protocol') == 'dash' or candidate.get('ext') == 'mpd':
+                raise Failure('format_unsupported', 'DASH streaming is not implemented.', 'Use another available format or local media.')
             ext = candidate.get('ext', 'bin')
-            if ext not in ('mp4', 'm4a', 'webm', 'flv', 'mp3', 'bin'):
+            if ext not in ('mp4', 'm4a', 'webm', 'flv', 'mp3', 'mov', 'mkv', 'm4v', 'ogg', 'wav', 'bin'):
                 ext = 'bin'
             paths.append(download_file(candidate['url'], directory / f'{token}-{index}.{ext}',
                                        headers=candidate.get('headers'), cookies=cookies))
@@ -186,7 +190,7 @@ def download(resolved, directory, *, want_video=True, quality='auto', width=768,
         actual = media.probe(final)
         if want_video and not actual['video']:
             raise Failure('invalid_media', 'Downloaded media has no video stream.')
-        if any(f.get('has_audio') for f in selected) and not actual['audio']:
+        if (not want_video or any(f.get('has_audio') for f in selected)) and not actual['audio']:
             raise Failure('invalid_media', 'Downloaded media is missing the expected audio stream.')
         expected = resolved.get('metadata', {}).get('duration')
         if expected and actual['duration'] < expected - max(2, expected * .03):
@@ -209,10 +213,14 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if host in ('www.youtube.com', 'youtube.com', 'm.youtube.com', 'youtu.be'):
         from . import youtube
         return youtube.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('v.qq.com', 'm.v.qq.com'):
+        from . import tencent
+        return tencent.resolve(url, part=part, cookies=cookies, need=need)
     if host.endswith('.tiktok.com') or host == 'tiktok.com':
         from . import tiktok
         return tiktok.resolve(url, part=part, cookies=cookies, need=need)
     if host.endswith('.douyin.com') or host == 'douyin.com':
         from . import douyin
         return douyin.resolve(url, part=part, cookies=cookies, need=need)
-    raise Failure('unsupported_source', 'This URL host is not a supported single-video platform.')
+    from . import generic
+    return generic.resolve(url, part=part, cookies=cookies, need=need)
