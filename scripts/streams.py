@@ -1,22 +1,19 @@
-"""Explicit public HTTP media and a deliberately small VOD HLS subset.
+"""Shared non-encrypted VOD HLS transport for dedicated platform adapters.
 
-Design researched in yt-dlp generic.py / downloader/hls.py (Unlicense).
-Parsing and transport are implemented here; no upstream runtime dependency.
+Research: yt-dlp downloader/hls.py (Unlicense). This module receives explicit
+platform media candidates; it does not resolve arbitrary websites or URLs.
 """
-from datetime import datetime, timezone
-import hashlib
 import http.client
 import math
-from html.parser import HTMLParser
 from pathlib import Path
 import re
 import tempfile
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin
 
-from . import Failure, download_file, media, request
-
-_MEDIA_EXTS = {'mp4', 'mov', 'webm', 'mkv', 'm4v', 'mp3', 'm4a', 'ogg', 'wav', 'flv'}
-_AUDIO_EXTS = {'mp3', 'm4a', 'ogg', 'wav'}
+if __package__:
+    from .platforms import Failure, download_file, media, request
+else:
+    from platforms import Failure, download_file, media, request
 
 
 def _attrs(text):
@@ -94,89 +91,6 @@ def _playlist(text, url):
     if not segments or pending is not None:
         raise Failure('parse_failed', 'HLS playlist has no complete media segments.')
     return {'segments': segments, 'init': init, 'duration': sum(durations)}, sum(durations)
-
-
-class _VideoHTML(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.videos, self.current, self.title, self.in_title = [], None, '', False
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        if tag == 'title':
-            self.in_title = True
-        elif tag == 'video':
-            self.current = []
-            self.videos.append(self.current)
-            if attrs.get('src'):
-                self.current.append(attrs['src'])
-        elif tag == 'source' and self.current is not None and attrs.get('src'):
-            self.current.append(attrs['src'])
-
-    def handle_endtag(self, tag):
-        if tag == 'video':
-            self.current = None
-        elif tag == 'title':
-            self.in_title = False
-
-    def handle_data(self, data):
-        if self.in_title:
-            self.title += data
-
-
-def _direct(url, content_type=''):
-    ext = Path(urlsplit(url).path).suffix.lstrip('.').lower()
-    audio = content_type.startswith('audio/') or ext in _AUDIO_EXTS
-    return {'url': url, 'ext': ext if ext in _MEDIA_EXTS else 'bin', 'has_video': not audio,
-            'has_audio': True if audio else None, 'width': None, 'height': None}
-
-
-def resolve(url, *, part=None, cookies=None, need=None):
-    if part is not None:
-        raise Failure('invalid_part', '--part only applies to Bilibili.')
-    with request(url, cookies=cookies) as response:
-        canonical = response.geturl()
-        content_type = response.headers.get('Content-Type', '').split(';')[0].lower()
-        prefix = response.read(512)
-        ext = Path(urlsplit(canonical).path).suffix.lower()
-        is_hls = prefix.lstrip().startswith(b'#EXTM3U') or ext == '.m3u8' or 'mpegurl' in content_type
-        if is_hls:
-            text = (prefix + response.read()).decode('utf-8-sig', errors='replace')
-        elif content_type.startswith(('video/', 'audio/')) or (ext.lstrip('.') in _MEDIA_EXTS and content_type != 'text/html'):
-            text = None
-        elif content_type == 'application/dash+xml' or ext == '.mpd':
-            raise Failure('format_unsupported', 'DASH media is not supported.')
-        else:
-            text = (prefix + response.read()).decode('utf-8-sig', errors='replace')
-    duration, title = None, Path(urlsplit(canonical).path).name or 'HTTP media'
-    if is_hls:
-        parsed, duration = _playlist(text, canonical)
-        formats = parsed if isinstance(parsed, list) else [{'url': canonical, 'ext': 'm3u8', 'protocol': 'hls', 'has_video': True, 'has_audio': None}]
-    elif text is None:
-        formats = [_direct(canonical, content_type)]
-    else:
-        page = _VideoHTML()
-        page.feed(text)
-        if len(page.videos) > 1:
-            raise Failure('media_ambiguous', 'The page contains multiple video elements.', 'Provide the intended media URL directly.')
-        if not page.videos or not page.videos[0]:
-            raise Failure('unsupported_source', 'The page has no explicit video/source media URL.', 'Provide a direct media URL or local file; JavaScript players are unsupported.')
-        title = page.title.strip() or title
-        formats = []
-        for address in dict.fromkeys(page.videos[0]):
-            address = urljoin(canonical, address)
-            if Path(urlsplit(address).path).suffix.lower() == '.m3u8':
-                final_url, playlist = _fetch(address, cookies)
-                parsed, item_duration = _playlist(playlist, final_url)
-                formats.extend(parsed if isinstance(parsed, list) else [{'url': final_url, 'ext': 'm3u8', 'protocol': 'hls', 'has_video': True, 'has_audio': None}])
-                duration = item_duration or duration
-            else:
-                formats.append(_direct(address))
-    identifier = hashlib.sha256(canonical.encode()).hexdigest()[:16]
-    source = {'platform': 'generic', 'id': identifier, 'url': url}
-    metadata = {**source, 'title': title, 'duration': duration, 'author': None, 'description': None,
-                'thumbnail': None, 'published_at': None, 'collected_at': datetime.now(timezone.utc).isoformat()}
-    return {'source': source, 'metadata': metadata, 'formats': formats, 'subtitles': [], 'diagnostics': []}
 
 
 def download_hls(candidate, path, *, cookies=None):

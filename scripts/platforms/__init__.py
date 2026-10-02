@@ -209,7 +209,10 @@ def download(resolved, directory, *, want_video=True, quality='auto', width=768,
                 paths.append(Path(video_path))
                 continue
             if candidate.get('protocol') == 'hls' or candidate.get('ext') == 'm3u8':
-                from .generic import download_hls
+                if __package__ == 'scripts.platforms':
+                    from ..streams import download_hls
+                else:
+                    from streams import download_hls
                 paths.append(download_hls(candidate, directory / f'{token}-{index}.mkv', cookies=cookies))
                 owned.append(paths[-1])
                 continue
@@ -248,7 +251,10 @@ def download(resolved, directory, *, want_video=True, quality='auto', width=768,
 
 
 def resolve(url, *, part=None, cookies=None, need=None):
-    host = (urllib.parse.urlsplit(url).hostname or '').lower()
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        raise Failure('invalid_url', 'A platform video URL must use HTTP or HTTPS.')
+    host = parsed.hostname.lower()
     if host in ('b23.tv', 'www.bilibili.com', 'bilibili.com', 'm.bilibili.com'):
         from . import bilibili
         return bilibili.resolve(url, part=part, cookies=cookies, need=need)
@@ -264,5 +270,5 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if host.endswith('.douyin.com') or host == 'douyin.com':
         from . import douyin
         return douyin.resolve(url, part=part, cookies=cookies, need=need)
-    from . import generic
-    return generic.resolve(url, part=part, cookies=cookies, need=need)
+    raise Failure('unsupported_source', 'This website is not supported by Agent Video.',
+                  'Use a supported platform video URL or a local media file.')

@@ -1,12 +1,9 @@
 import hashlib
 import json
-from pathlib import Path
-import sys
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from platforms import Failure, tencent
+from scripts.platforms import Failure, tencent
 
 URL = 'https://v.qq.com/x/page/q326831cny0.html'
 

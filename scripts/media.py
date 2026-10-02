@@ -346,16 +346,24 @@ def transcribe(path, info, start, end, language, track, model):
                       'Install the asr extra and set AGENT_VIDEO_ASR_MODEL to a downloaded model directory.')
     with tempfile.TemporaryDirectory(prefix='agent-video-asr-') as tmp:
         audio = Path(tmp) / 'speech.wav'
-        export_audio(path, audio, info, start, end, track, asr=True)
+        prepared = export_audio(path, audio, info, start, end, track, asr=True)
         result = Path(tmp) / 'result.json'
         args = [sys.executable, str(Path(__file__).resolve()), '--asr-worker', str(audio), str(result), str(model)]
         if language:
             args.append(language)
         run(args, timeout=1800)
         data = json.loads(result.read_text())
+    # ASR can place the last word beyond the audio it received. Keep estimated
+    # times inside the actual processed interval, preserving source offsets.
+    limit = min(prepared['duration'], max(0, info['duration'] - start))
+    if end is not None:
+        limit = min(limit, end - start)
+    segments = []
     for segment in data['segments']:
-        segment['start'] += start
-        segment['end'] += start
+        begin, finish = max(0, segment['start']), min(limit, segment['end'])
+        if begin < finish:
+            segments.append({**segment, 'start': begin + start, 'end': finish + start})
+    data['segments'] = segments
     if not data['segments']:
         raise Failure('no_speech', 'ASR found no speech in the requested interval.')
     return data

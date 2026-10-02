@@ -1,6 +1,6 @@
 include README.md SKILL.md LICENSE
 recursive-include scripts *.py
-recursive-include tests test_*.py
+recursive-include tests *.py
 exclude SPEC.md AGENTS.md CLAUDE.md
 prune .dev
 prune .agent-video

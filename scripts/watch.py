@@ -292,7 +292,8 @@ class Watch:
                     continue
                 if self.local and a['audio_track'] != media.audio_index(self.info or media.probe(self.local)):
                     continue
-            if kind == 'transcript' and self.args.language and a.get('language') != self.args.language:
+            if kind == 'transcript' and self.args.language and self.args.language not in (
+                    a.get('requested_language'), a.get('language')):
                 continue
             if kind == 'transcript' and self.args.language is None and (
                     'requested_language' not in a or a['requested_language'] is not None):

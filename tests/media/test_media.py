@@ -2,13 +2,11 @@
 import json
 from pathlib import Path
 import shutil
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-import media
+from scripts import media
 
 
 class SubtitleTests(unittest.TestCase):
@@ -152,6 +150,26 @@ class RealMediaTests(unittest.TestCase):
         self.assertEqual(result['language'], 'zh')
         self.assertEqual(result['segments'][0]['start'], 1.1)
         self.assertEqual(result['segments'][0]['end'], 1.7)
+        def estimated(args, timeout=300):
+            media.atomic_json(args[4], {'language': 'en', 'segments': [
+                {'start': .1, 'end': .3, 'text': 'normal'},
+                {'start': .2, 'end': 8, 'text': 'overlong end'},
+                {'start': 8, 'end': 9, 'text': 'outside start'},
+                {'start': -.3, 'end': .2, 'text': 'negative start'},
+                {'start': -.3, 'end': -.1, 'text': 'outside before'},
+                {'start': .3, 'end': .3, 'text': 'zero length'}]})
+            return '', ''
+        for prepared_duration, source_duration, end, limit in [(.6, 3, 2, .6), (1, 3, 1.5, .5), (1, 1.4, None, .4)]:
+            with self.subTest(prepared_duration=prepared_duration, source_duration=source_duration, end=end), \
+                 patch.object(media, 'asr_ready', return_value=True), \
+                 patch.object(media, 'export_audio', return_value={'duration': prepared_duration}), \
+                 patch.object(media, 'run', side_effect=estimated):
+                bounded = media.transcribe(self.source, {**self.info, 'duration': source_duration},
+                                           1, end, None, None, 'mock-model')
+            self.assertEqual([s['text'] for s in bounded['segments']], ['normal', 'overlong end', 'negative start'])
+            self.assertEqual(bounded['segments'][0], {'start': 1.1, 'end': 1.3, 'text': 'normal'})
+            self.assertAlmostEqual(bounded['segments'][1]['end'], 1 + limit)
+            self.assertEqual(bounded['segments'][2], {'start': 1, 'end': 1.2, 'text': 'negative start'})
         def silent(args, timeout=300):
             if '--asr-worker' in args:
                 media.atomic_json(args[4], {'language': 'en', 'segments': []})

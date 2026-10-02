@@ -133,7 +133,10 @@ def _native_audio_ids(formats):
 
 
 def _hls_formats(text, url, *, include_audio=True):
-    from .generic import _attrs, _value
+    if __package__ == 'scripts.platforms':
+        from ..streams import _attrs, _value
+    else:
+        from streams import _attrs, _value
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines or lines[0] != '#EXTM3U':
         raise Failure('parse_failed', 'YouTube HLS response is not a playlist.')
@@ -191,7 +194,10 @@ def _hls_formats(text, url, *, include_audio=True):
 
 
 def _media_formats(player, *, cookies=None, want_video=True, want_audio=True):
-    from .generic import _fetch
+    if __package__ == 'scripts.platforms':
+        from ..streams import _fetch
+    else:
+        from streams import _fetch
     streaming = player.get('streamingData') or {}
     raw = streaming.get('formats', []) + streaming.get('adaptiveFormats', [])
     native_ids = _native_audio_ids(raw)

@@ -1,13 +1,8 @@
-"""Shared candidate selection and lightweight embedded-page parsing."""
-import json
-from pathlib import Path
-import sys
+"""Shared candidate selection and required-audio delivery boundaries."""
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-import platforms
-from platforms import youtube, tiktok
+from scripts import platforms
 
 
 class PlatformsTest(unittest.TestCase):
@@ -62,12 +57,6 @@ class PlatformsTest(unittest.TestCase):
         self.assertEqual(platforms.select_formats([base, smooth, sharp], quality='1080p')[0]['url'], '60fps')
         self.assertEqual(platforms.select_formats([base, {**base, 'url': 'higher', 'bitrate': 20000}])[0]['url'], 'higher')
 
-    def test_embedded_public_data(self):
-        data = {'videoDetails': {'videoId': 'abcdefghijk', 'title': 'Video'}}
-        self.assertEqual(youtube._player('ytInitialPlayerResponse = ' + json.dumps(data) + ';'), data)
-        item = {'id': '123', 'video': {'duration': 7}}
-        html = '<script id="SIGI_STATE">' + json.dumps({'ItemModule': {'123': item}}) + '</script>'
-        self.assertEqual(tiktok._item(tiktok._embedded(html), '123'), item)
 
 if __name__ == '__main__':
     unittest.main()

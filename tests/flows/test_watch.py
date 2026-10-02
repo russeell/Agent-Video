@@ -171,7 +171,8 @@ class WatchTests(unittest.TestCase):
                     remote_manifest = directory / 'manifest.json'
                     data = json.loads(remote_manifest.read_text())
                     old_asr = next(a for a in data['artifacts'] if a['type'] == 'transcript' and a.get('audio_track') == 2)
-                    data['source'] = {'platform': 'generic', 'url': 'https://example.test/two-tracks'}
+                    data['source'] = {'platform': 'youtube', 'id': 'abcdefghijk',
+                                      'url': 'https://www.youtube.com/watch?v=abcdefghijk'}
                     data['artifacts'] = [a for a in data['artifacts'] if a['type'] == 'info' or
                                          a['type'] == 'audio' and a.get('audio_track_default') is True]
                     if legacy:
@@ -217,6 +218,40 @@ class WatchTests(unittest.TestCase):
                     code, reused = self.call('--evidence', first['manifest'], '--language', 'en')
                     self.assertEqual(code, 0, reused)
                     self.assertEqual(reused['artifacts'], first['artifacts'])
+
+    def test_requested_language_alias_reuses_actual_variant_without_leaking_to_other_requests(self):
+        from scripts import platforms
+        source = {'platform': 'tiktok', 'id': '123', 'url': 'https://www.tiktok.com/@author/video/123'}
+        tracks = [{'url': 'https://example.test/en-US', 'ext': 'json3', 'language': 'en-US', 'origin': 'platform_auto'},
+                  {'url': 'https://example.test/fr', 'ext': 'json3', 'language': 'fr', 'origin': 'platform_manual'}]
+        resolved = {'source': source, 'metadata': {'duration': 2}, 'subtitles': tracks,
+                    'formats': [], 'diagnostics': []}
+        text = json.dumps({'events': [{'tStartMs': 0, 'dDurationMs': 1000, 'segs': [{'utf8': 'Actual English'}]}]})
+        with patch.object(platforms, 'resolve', return_value=resolved) as resolve, \
+             patch.object(platforms, 'fetch_subtitle', return_value=text) as fetch_subtitle, \
+             patch.object(platforms, 'download', side_effect=AssertionError('A subtitle request must not download media')) as download, \
+             patch.object(media, 'transcribe', side_effect=AssertionError('Available subtitles must not run ASR')) as asr:
+            code, first = self.call(source['url'], '--out', str(self.root / 'out'), '--language', 'en')
+            self.assertEqual(code, 0, first)
+            evidence = first['manifest']
+            original = next(a['path'] for a in first['artifacts'] if a['type'] == 'transcript')
+            self.assertEqual(json.loads(Path(original).read_text())['language'], 'en-US')
+            for bounds in ([], ['--start', '.2', '--end', '.8']):
+                with self.subTest(bounds=bounds):
+                    code, reused = self.call('--evidence', evidence, '--language', 'en', *bounds)
+                    self.assertEqual(code, 0, reused)
+            self.assertEqual((resolve.call_count, fetch_subtitle.call_count), (1, 1))
+            code, regional = self.call('--evidence', evidence, '--language', 'en-GB')
+            self.assertEqual(code, 0, regional)
+            self.assertEqual((resolve.call_count, fetch_subtitle.call_count), (2, 2))
+            code, unspecified = self.call('--evidence', evidence)
+            self.assertEqual(code, 2, unspecified)
+            self.assertEqual(resolve.call_count, 3)
+            self.assertEqual(fetch_subtitle.call_count, 2)
+            self.assertTrue(any(d['code'] == 'subtitle_ambiguous' for d in unspecified['diagnostics']))
+            self.assertFalse(any(a['type'] == 'transcript' for a in unspecified['artifacts']))
+            download.assert_not_called()
+            asr.assert_not_called()
 
     def test_source_change_removes_index_preserves_old_files(self):
         code, result = self.new()

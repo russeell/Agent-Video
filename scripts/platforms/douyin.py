@@ -23,6 +23,23 @@ def _find(data, identifier):
     return None
 
 
+def _embedded(page):
+    match = re.search(r'<script\b[^>]*\bid=[\"\']RENDER_DATA[\"\'][^>]*>(.*?)</script>', page, re.S)
+    if match:
+        try:
+            return json.loads(unquote(html.unescape(match[1])))
+        except ValueError:
+            raise Failure('parse_failed', 'Douyin returned malformed embedded work data.') from None
+    size = len(page.encode('utf-8'))
+    if 'byted_acrawler' in page and '__ac_signature' in page:
+        raise Failure('player_challenge_unsupported',
+                      f'Douyin returned a JavaScript signature challenge ({size} response bytes), not work data.',
+                      'This anonymous path is limited; provide a local media file or your own Cookie file.')
+    raise Failure('experimental_access_limited',
+                  f'Douyin exposed no readable single-work data ({size} response bytes).',
+                  'Retry later or provide a local media file.')
+
+
 def resolve(url, *, part=None, cookies=None, need=None):
     if part is not None:
         raise Failure('invalid_part', '--part only applies to Bilibili.')
@@ -37,13 +54,10 @@ def resolve(url, *, part=None, cookies=None, need=None):
     identifier = match[1]
     canonical = 'https://www.douyin.com/video/' + identifier
     page = read_text(canonical, cookies=cookies)
-    match = re.search(r'<script\b[^>]*\bid=[\"\']RENDER_DATA[\"\'][^>]*>(.*?)</script>', page, re.S)
-    try:
-        item = _find(json.loads(unquote(html.unescape(match[1]))), identifier) if match else None
-    except ValueError:
-        item = None
+    item = _find(_embedded(page), identifier)
     if not item:
-        raise Failure('experimental_access_limited', 'Douyin returned no readable public single-work data; challenge processing is unsupported.', 'Provide a local media file or retry with your own Cookie file.')
+        raise Failure('parse_failed', 'Douyin embedded data does not identify the requested single video.',
+                      'Check the video URL or provide a local media file.')
     video = item['video']
     author = item.get('author') or {}
     address = video.get('play_addr') or video.get('playAddr') or {}
@@ -54,7 +68,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
     return {'source': {'platform': 'douyin', 'id': identifier, 'url': canonical},
             'metadata': {'platform': 'douyin', 'id': identifier, 'url': canonical, 'title': item.get('desc'),
                          'description': item.get('desc'), 'author': author.get('nickname'),
-                         'duration': video.get('duration', 0) / 1000 or None, 'published_at': item.get('create_time'),
-                         'experimental': True, 'audio_expected': bool(formats), 'collected_at': datetime.now(timezone.utc).isoformat()},
+                         'duration': video.get('duration') / 1000 if video.get('duration') is not None else None, 'published_at': item.get('create_time'),
+                         'experimental': True, 'audio_expected': True if formats else None, 'collected_at': datetime.now(timezone.utc).isoformat()},
             'subtitles': [], 'formats': formats,
             'diagnostics': [diagnostic('transcript', Failure('subtitle_failed', 'The experimental Douyin page path cannot establish subtitle availability.', 'Use local ASR.'))] if not need or 'transcript' in need else []}

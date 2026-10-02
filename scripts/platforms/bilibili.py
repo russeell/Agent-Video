@@ -2,10 +2,36 @@
 
 Endpoint and DASH field research: yt-dlp's Unlicense bilibili extractor;
 this implementation only uses the public single-work API responses.
+Subtitle wire fields and public player URL decoding adapted from BBDownT,
+commit 259a5558cee0a349a7ebb60bd31e40c88e5bc1ed.
+
+MIT License
+
+Copyright (c) 2020 nilaoda
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 """
 from datetime import datetime, timezone
+import http.client
+import json
 import re
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 from . import Failure, diagnostic, read_json, request, media
 
 API = 'https://api.bilibili.com'
@@ -55,6 +81,116 @@ def _playinfo(bvid, cid, duration, cookies):
     return _full_playinfo(_api('/x/player/playurl', query, cookies), duration)
 
 
+# Public player obfuscation constants, not credentials. Only the subtitle path
+# is encoded; query signatures must be kept unchanged.
+_SUBTITLE_ENCODINGS = (
+    ('nP](wOFRvU.+<fjS{jn-!$D|Dz&",zT`', '=CFxYRn{.y|uVyO$uh&sikph?N.ilF/`bilibili'),
+    ('Bn"q~|albg@]Go~ACgyDvKnd+)_D}^&J?', "Cu~L!xs~f^&r@'vh=q]q{eeng*sEg^kp#Jbilibili"),
+)
+
+
+def _subtitle_url(address):
+    address = 'https:' + address if address.startswith('//') else address
+    parsed = urlsplit(address)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        raise Failure('parse_failed', 'Bilibili returned an invalid subtitle address.')
+    if parsed.hostname != 'subtitle.bilibili.com':
+        return address
+    encoded = parsed.path[1:]
+    if re.search(r'%(?![0-9a-fA-F]{2})', encoded):
+        raise Failure('parse_failed', 'Bilibili subtitle address has invalid encoding.')
+    cipher = unquote(encoded)
+    for prefix, key in _SUBTITLE_ENCODINGS:
+        plain = ''.join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(cipher))
+        if not plain.startswith(prefix):
+            continue
+        path = plain[len(prefix):]
+        if (not path.startswith(('/bfs/subtitle/', '/bfs/ai_subtitle/'))
+                or path in ('/bfs/subtitle/', '/bfs/ai_subtitle/')
+                or any(ord(c) < 32 or ord(c) == 127 or c in '?#\\' for c in path)
+                or any(p in ('.', '..') for p in path.split('/'))):
+            raise Failure('parse_failed', 'Bilibili decoded subtitle path is invalid.')
+        return 'https://aisubtitle.hdslb.com' + path + ('?' + parsed.query if parsed.query else '')
+    raise Failure('format_unsupported', 'Bilibili subtitle address uses an unknown public encoding.')
+
+
+def _wire_fields(body):
+    """Read only the standard wire fields used by the web subtitle reply."""
+    at = 0
+    fields = {}
+    def varint():
+        nonlocal at
+        value = 0
+        for shift in range(0, 70, 7):
+            if at >= len(body):
+                break
+            byte = body[at]
+            at += 1
+            value |= (byte & 127) << shift
+            if byte < 128:
+                return value
+        raise Failure('parse_failed', 'Bilibili subtitle reply contains a truncated integer.')
+    while at < len(body):
+        tag = varint()
+        number, wire = tag >> 3, tag & 7
+        if not number:
+            raise Failure('parse_failed', 'Bilibili subtitle reply contains an invalid field.')
+        if wire == 0:
+            value = varint()
+        elif wire in (1, 2, 5):
+            size = varint() if wire == 2 else (8 if wire == 1 else 4)
+            if size > len(body) - at:
+                raise Failure('parse_failed', 'Bilibili subtitle reply contains a truncated field.')
+            value = body[at:at + size]
+            at += size
+        else:
+            raise Failure('format_unsupported', 'Bilibili subtitle reply uses an unsupported wire type.')
+        fields.setdefault(number, []).append(value)
+    return fields
+
+
+def _web_subtitles(aid, cid, cookies):
+    query = {'oid': cid, 'pid': aid, 'context_ext': '{"video_type":1}', 'type': 1,
+             'cur_production_type': 0, 'preferred_language': 'ai-zh', 'playlist_switch': 0}
+    try:
+        with request(API + '/x/v2/subtitle/web/view?' + urlencode(query),
+                     headers={**HEADERS, 'Accept': 'application/octet-stream'}, cookies=cookies) as response:
+            body = response.read(1024 * 1024 + 1)
+    except (OSError, http.client.HTTPException):
+        raise Failure('network_failed', 'Bilibili subtitle track reply could not be completely read.', 'Retry later.') from None
+    if len(body) > 1024 * 1024:
+        raise Failure('parse_failed', 'Bilibili subtitle track reply is too large.')
+    if body.lstrip().startswith(b'{'):
+        # Some API errors use JSON despite the requested protobuf response.
+        try:
+            error = json.loads(body)
+        except ValueError:
+            raise Failure('parse_failed', 'Bilibili returned an invalid subtitle reply.') from None
+        code = 'auth_required' if error.get('code') in (-101, -104) else 'subtitle_failed'
+        raise Failure(code, 'Bilibili subtitle API rejected the request (code %s).' % error.get('code'))
+    try:
+        reply = _wire_fields(body)
+        if not reply.get(1) or not isinstance(reply[1][0], bytes):
+            raise Failure('parse_failed', 'Bilibili subtitle reply has no subtitle container.')
+        video = _wire_fields(reply[1][0])
+        candidates = []
+        for encoded in video.get(3, []):
+            if not isinstance(encoded, bytes):
+                raise Failure('parse_failed', 'Bilibili returned an invalid subtitle track.')
+            track = _wire_fields(encoded)
+            language = track.get(3, [b''])[0].decode()
+            address = track.get(5, [b''])[0].decode()
+            if not language or not address:
+                continue
+            candidates.append({'url': _subtitle_url(address), 'ext': 'json',
+                               'language': language.removeprefix('ai-'),
+                               'origin': 'platform_auto' if language.startswith('ai-') or track.get(7, [0])[0] == 1 or track.get(9, [0])[0] else 'platform_manual',
+                               'headers': HEADERS})
+        return candidates
+    except (AttributeError, UnicodeError, TypeError, ValueError):
+        raise Failure('parse_failed', 'Bilibili returned invalid subtitle track fields.') from None
+
+
 def resolve(url, *, part=None, cookies=None, need=None):
     if urlsplit(url).hostname == 'b23.tv':
         with request(url, cookies=cookies) as response:
@@ -95,20 +231,31 @@ def resolve(url, *, part=None, cookies=None, need=None):
     needs = set(need or ('info', 'transcript', 'video'))
     if 'transcript' in needs:
         try:
-            player = _api('/x/player/v2', {'bvid': bvid, 'cid': cid}, cookies)
-            for subtitle in (player.get('subtitle') or {}).get('subtitles', []):
-                address = subtitle.get('subtitle_url')
-                if address:
-                    result['subtitles'].append({'url': 'https:' + address if address.startswith('//') else address,
-                                               'ext': 'json', 'language': subtitle.get('lan'),
-                                               'origin': 'platform_auto' if subtitle.get('ai_type') or str(subtitle.get('lan', '')).startswith('ai-') else 'platform_manual',
-                                               'headers': HEADERS})
-                    result['subtitles'][-1]['language'] = str(subtitle.get('lan', '')).removeprefix('ai-')
+            result['subtitles'] = _web_subtitles(view['aid'], cid, cookies)
             if not result['subtitles']:
-                code = 'auth_required' if player.get('need_login_subtitle') else 'subtitle_absent'
-                result['diagnostics'].append(diagnostic('transcript', Failure(code, 'Bilibili returned no accessible subtitle tracks.', 'Provide your own Cookie file or use local ASR.')))
+                result['diagnostics'].append(diagnostic('transcript', Failure(
+                    'subtitle_absent', 'Bilibili returned no accessible subtitle tracks.', 'Use local ASR if needed.')))
         except Failure as exc:
-            result['diagnostics'].append(diagnostic('transcript', Failure('subtitle_failed', str(exc), exc.next_action)))
+            # Keep the established JSON path as one fallback for endpoint errors.
+            # A successful empty new reply does not cause another query.
+            try:
+                player = _api('/x/player/v2', {'bvid': bvid, 'cid': cid}, cookies)
+                for subtitle in (player.get('subtitle') or {}).get('subtitles', []):
+                    if subtitle.get('subtitle_url'):
+                        language = str(subtitle.get('lan', ''))
+                        result['subtitles'].append({'url': _subtitle_url(subtitle['subtitle_url']), 'ext': 'json',
+                            'language': language.removeprefix('ai-'),
+                            'origin': 'platform_auto' if subtitle.get('ai_type') or language.startswith('ai-') else 'platform_manual',
+                            'headers': HEADERS})
+                if not result['subtitles']:
+                    result['diagnostics'].append(diagnostic('transcript', exc))
+                    if player.get('need_login_subtitle') and exc.code != 'auth_required':
+                        result['diagnostics'].append(diagnostic('transcript', Failure(
+                            'auth_required', 'Bilibili legacy subtitle response requires login.', 'Provide your own Cookie file or use local ASR.')))
+            except Failure as fallback:
+                result['diagnostics'].append(diagnostic('transcript', exc))
+                if fallback.code != exc.code:
+                    result['diagnostics'].append(diagnostic('transcript', fallback))
     if needs.intersection(('video', 'audio', 'frames', 'media')):
         try:
             play = _playinfo(bvid, cid, page.get('duration'), cookies)

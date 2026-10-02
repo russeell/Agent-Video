@@ -1,16 +1,18 @@
 """YouTube player request and subtitle provenance, without network requests."""
 import json
-from pathlib import Path
-import sys
 import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from platforms import Failure, generic, select_formats, select_subtitle, youtube
+from scripts import streams
+from scripts.platforms import Failure, select_formats, select_subtitle, youtube
 
 
 class YouTubeTest(unittest.TestCase):
+    def test_embedded_public_data(self):
+        data = {'videoDetails': {'videoId': 'abcdefghijk', 'title': 'Video'}}
+        self.assertEqual(youtube._player('ytInitialPlayerResponse = ' + json.dumps(data) + ';'), data)
+
     def watch_html(self, extra=None):
         player = {'videoDetails': {'title': 'Public video', 'lengthSeconds': '30'},
                   'playabilityStatus': {'status': 'OK'}}
@@ -98,7 +100,7 @@ class YouTubeMediaTest(unittest.TestCase):
                                'displayName': 'Chinese (Traditional) original (default)'}},
                {'url': 'https://example.com/dubbed', 'mimeType': 'audio/webm', 'bitrate': 200000,
                 'audioTrack': {'id': 'en-US.10', 'audioIsDefault': True, 'isAutoDubbed': True}}]
-        with patch.object(generic, '_fetch') as fetch:
+        with patch.object(streams, '_fetch') as fetch:
             formats, language, diagnostics, expected_audio = youtube._media_formats(
                 {'streamingData': {'adaptiveFormats': raw, 'hlsManifestUrl': 'https://example.com/master'}},
                 want_video=False)
@@ -109,7 +111,7 @@ class YouTubeMediaTest(unittest.TestCase):
         self.assertEqual(diagnostics, [])
         with self.subTest('a manual dub is not original merely because it is not auto dubbed'):
             raw[-1]['audioTrack'].update(isAutoDubbed=False, displayName='English dubbed')
-            with patch.object(generic, '_fetch'):
+            with patch.object(streams, '_fetch'):
                 formats, language, diagnostics, expected_audio = youtube._media_formats(
                     {'streamingData': {'adaptiveFormats': raw}}, want_video=False)
             self.assertEqual(select_formats(formats, want_video=False)[0]['url'], 'https://example.com/original')
@@ -127,7 +129,7 @@ normal.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=5713164,CODECS="vp09.00.40.08,mp4a.40.2",RESOLUTION=1080x1920,FRAME-RATE=30,AUDIO="high"
 premium.m3u8
 '''
-        with patch.object(generic, '_fetch', return_value=('https://example.com/master.m3u8', master)) as fetch:
+        with patch.object(streams, '_fetch', return_value=('https://example.com/master.m3u8', master)) as fetch:
             formats, language, diagnostics, expected_audio = youtube._media_formats(
                 {'streamingData': {'hlsManifestUrl': 'https://example.com/master.m3u8'}}, cookies='explicit-cookies')
         fetch.assert_called_once()
@@ -156,7 +158,7 @@ premium.m3u8
                 with self.subTest(needs=needs), \
                      patch.object(youtube, 'read_text', return_value=html), \
                      patch.object(youtube, 'read_json', return_value=player), \
-                     patch.object(generic, '_fetch', return_value=('https://example.com/master.m3u8', ambiguous)):
+                     patch.object(streams, '_fetch', return_value=('https://example.com/master.m3u8', ambiguous)):
                     result = youtube.resolve('https://youtu.be/abcdefghijk', need=needs)
                 self.assertTrue(result['metadata']['audio_expected'])
                 if require_audio:
@@ -168,7 +170,7 @@ premium.m3u8
                     self.assertEqual(result['diagnostics'], [])
         with self.subTest('undeclared audio stays unknown'):
             unknown = master.replace(',AUDIO="low"', '').replace(',AUDIO="high"', '')
-            with patch.object(generic, '_fetch', return_value=('https://example.com/master.m3u8', unknown)):
+            with patch.object(streams, '_fetch', return_value=('https://example.com/master.m3u8', unknown)):
                 formats, language, diagnostics, expected_audio = youtube._media_formats(
                     {'streamingData': {'hlsManifestUrl': 'https://example.com/master.m3u8'}}, want_audio=False)
             self.assertIsNone(expected_audio)
@@ -178,20 +180,20 @@ premium.m3u8
             {'url': 'https://example.com/video', 'mimeType': 'video/mp4', 'width': 1080, 'height': 1920},
             {'signatureCipher': 'unsupported', 'mimeType': 'audio/webm',
              'audioTrack': {'id': 'zh.1', 'audioIsDefault': True, 'displayName': 'Chinese original'}}]}}
-        with patch.object(generic, '_fetch', side_effect=Failure('network_failed', 'HLS request failed.')):
+        with patch.object(streams, '_fetch', side_effect=Failure('network_failed', 'HLS request failed.')):
             formats, language, diagnostics, expected_audio = youtube._media_formats(player)
         self.assertEqual([f['url'] for f in formats], ['https://example.com/video'])
         self.assertTrue(expected_audio)
         self.assertEqual([d['code'] for d in diagnostics], ['network_failed', 'audio_unavailable'])
         with self.subTest('ambiguous HLS audio cannot turn a direct video into a silent full delivery'):
             player['streamingData']['adaptiveFormats'] = player['streamingData']['adaptiveFormats'][:1]
-            with patch.object(generic, '_fetch', return_value=('https://example.com/master', '#EXTM3U')), \
+            with patch.object(streams, '_fetch', return_value=('https://example.com/master', '#EXTM3U')), \
                  patch.object(youtube, '_hls_formats', side_effect=Failure('audio_ambiguous', 'No original audio identified.')):
                 formats, language, diagnostics, expected_audio = youtube._media_formats(player)
             self.assertEqual([f['url'] for f in formats], ['https://example.com/video'])
             self.assertTrue(expected_audio)
             self.assertEqual(diagnostics[0]['code'], 'audio_ambiguous')
-            with patch.object(generic, '_fetch', side_effect=Failure('network_failed', 'Master unavailable.')):
+            with patch.object(streams, '_fetch', side_effect=Failure('network_failed', 'Master unavailable.')):
                 formats, language, diagnostics, expected_audio = youtube._media_formats(player)
             self.assertIsNone(expected_audio)
             self.assertEqual([f['url'] for f in formats], ['https://example.com/video'])
