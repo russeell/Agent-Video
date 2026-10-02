@@ -67,6 +67,121 @@ class WatchTests(unittest.TestCase):
         self.assertTrue(any(a['type'] == 'frames' for a in result['artifacts']))
         code, result = self.new('--get', 'frames', '--at', '0,1', '--max-frames', '1')
         self.assertEqual(code, 64)
+        for kind in ('video', 'audio', 'transcript'):
+            for bounds in (['--start', '0.2', '--end', '99'], ['--start', '2']):
+                with self.subTest(kind=kind, bounds=bounds):
+                    with patch.object(watch.Watch, 'acquire', side_effect=AssertionError('Known bad ranges must not acquire media')):
+                        code, bad = self.new('--get', kind, *bounds)
+                    self.assertEqual(code, 2, bad)
+                    self.assertTrue(any(d['code'] == 'range_out_of_bounds' for d in bad['diagnostics']))
+                    self.assertEqual([a['type'] for a in bad['artifacts']], ['info'])
+                    data = json.loads(Path(bad['manifest']).read_text())
+                    self.assertEqual([a['type'] for a in data['artifacts']], ['info'])
+
+    def test_selected_audio_track_does_not_replace_default_in_followups(self):
+        multi = self.root / 'two-tracks.mp4'
+        subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', self.video,
+                        '-f', 'lavfi', '-i', 'sine=frequency=880:duration=2',
+                        '-map', '0:v', '-map', '0:a', '-map', '1:a', '-c:v', 'copy',
+                        '-c:a', 'aac', '-disposition:a:0', 'default', '-disposition:a:1', '0', multi], check=True)
+        code, selected = self.call(str(multi), '--out', str(self.root / 'out'),
+                                   '--get', 'video,audio', '--audio-track', '2')
+        self.assertEqual(code, 0, selected)
+        evidence = selected['manifest']
+        old = {a['type']: a['path'] for a in selected['artifacts']}
+        code, default = self.call('--evidence', evidence, '--get', 'video,audio')
+        self.assertEqual(code, 0, default)
+        current = {a['type']: a['path'] for a in default['artifacts']}
+        self.assertNotEqual(current['audio'], old['audio'])
+        self.assertNotEqual(current['video'], old['video'])
+        self.assertEqual(len(media.probe(current['video'])['audio']), 2)
+        def tone_frequency(path):
+            from array import array
+            samples = array('h', subprocess.check_output([
+                'ffmpeg', '-v', 'error', '-i', path, '-ss', '0.1', '-t', '1', '-ac', '1',
+                '-ar', '16000', '-f', 's16le', '-']))
+            crossings = sum(a <= 0 < b for a, b in zip(samples, samples[1:]))
+            return crossings * 16000 / len(samples)
+        self.assertAlmostEqual(tone_frequency(current['audio']), 440, delta=5)
+        self.assertAlmostEqual(tone_frequency(old['audio']), 880, delta=5)
+        for track, expected in [(None, current), ('2', old)]:
+            args = ['--evidence', evidence, '--get', 'video,audio']
+            if track:
+                args += ['--audio-track', track]
+            code, reused = self.call(*args)
+            self.assertEqual(code, 0, reused)
+            self.assertEqual({a['type']: a['path'] for a in reused['artifacts']}, expected)
+        def transcribe(path, info, start, end, language, track, model):
+            return {'segments': [{'start': 0, 'end': 1, 'text': f'track {track}'}],
+                    'language': language or 'en'}
+        with patch.dict('os.environ', {'AGENT_VIDEO_ASR_MODEL': str(self.root)}), \
+                patch.object(media, 'asr_ready', return_value=True), \
+                patch.object(media, 'transcribe', side_effect=transcribe) as asr:
+            code, selected_text = self.call('--evidence', evidence, '--get', 'transcript', '--audio-track', '2')
+            self.assertEqual(code, 0, selected_text)
+            code, default_text = self.call('--evidence', evidence, '--get', 'transcript')
+            self.assertEqual(code, 0, default_text)
+            text_path = next(a['path'] for a in default_text['artifacts'] if a['type'] == 'transcript')
+            self.assertEqual(json.loads(Path(text_path).read_text())['segments'][0]['text'], 'track 1')
+            self.assertEqual(asr.call_count, 2)
+            self.call('--evidence', evidence, '--get', 'transcript')
+            self.assertEqual(asr.call_count, 2)
+            # With only a remote-derived audio left, stream 0 must not become
+            # source default stream 1. Unknown legacy selection is also unsafe.
+            from scripts import platforms
+            for legacy in (False, True):
+                with self.subTest(legacy=legacy):
+                    directory = self.root / ('remote-legacy' if legacy else 'remote-derived')
+                    shutil.copytree(Path(evidence).parent, directory)
+                    remote_manifest = directory / 'manifest.json'
+                    data = json.loads(remote_manifest.read_text())
+                    old_asr = next(a for a in data['artifacts'] if a['type'] == 'transcript' and a.get('audio_track') == 2)
+                    data['source'] = {'platform': 'generic', 'url': 'https://example.test/two-tracks'}
+                    data['artifacts'] = [a for a in data['artifacts'] if a['type'] == 'info' or
+                                         a['type'] == 'audio' and a.get('audio_track_default') is True]
+                    if legacy:
+                        data['artifacts'].append(old_asr)
+                        for a in data['artifacts']:
+                            a.pop('audio_track_default', None)
+                            a.pop('requested_language', None)
+                    remote_manifest.write_text(json.dumps(data))
+                    resolved = {'source': data['source'], 'metadata': {'duration': 2}, 'subtitles': [], 'formats': []}
+                    def download(resolved, dest, **kwargs):
+                        dest.mkdir(parents=True, exist_ok=True)
+                        path = dest / 'full-source.mp4'
+                        shutil.copy2(multi, path)
+                        return path
+                    with patch.object(platforms, 'resolve', return_value=resolved), \
+                            patch.object(platforms, 'download', side_effect=download) as fetch:
+                        code, text = self.call('--evidence', str(remote_manifest), '--get', 'transcript')
+                    self.assertEqual(code, 0, text)
+                    self.assertEqual(fetch.call_count, 1)
+                    self.assertEqual(asr.call_args.args[5], 1)
+
+    def test_explicit_transcript_language_does_not_resolve_default_ambiguity(self):
+        self.video.with_suffix('.srt').unlink()
+        for language, text in [('en', 'English'), ('zh', '中文')]:
+            self.video.with_suffix(f'.{language}.srt').write_text(
+                f'1\n00:00:00,000 --> 00:00:01,000\n{text}\n')
+        with patch.object(media, 'transcribe', side_effect=AssertionError('Subtitles must not run ASR')), \
+                patch.object(watch.Watch, 'acquire', side_effect=AssertionError('Subtitles must not acquire media')):
+            code, first = self.new('--language', 'en')
+            self.assertEqual(code, 0, first)
+            for legacy in (False, True):
+                with self.subTest(legacy=legacy):
+                    if legacy:
+                        path = Path(first['manifest'])
+                        data = json.loads(path.read_text())
+                        for artifact in data['artifacts']:
+                            artifact.pop('requested_language', None)
+                        path.write_text(json.dumps(data))
+                    code, unspecified = self.call('--evidence', first['manifest'])
+                    self.assertEqual(code, 2, unspecified)
+                    self.assertTrue(any(d['code'] == 'subtitle_language_ambiguous' for d in unspecified['diagnostics']))
+                    self.assertFalse(any(a['type'] == 'transcript' for a in unspecified['artifacts']))
+                    code, reused = self.call('--evidence', first['manifest'], '--language', 'en')
+                    self.assertEqual(code, 0, reused)
+                    self.assertEqual(reused['artifacts'], first['artifacts'])
 
     def test_source_change_removes_index_preserves_old_files(self):
         code, result = self.new()
@@ -297,6 +412,16 @@ class WatchTests(unittest.TestCase):
             self.assertEqual(code, 0, repaired)
             repaired_path = next(a['path'] for a in repaired['artifacts'] if a['type'] == 'video')
             self.assertTrue(media.probe(repaired_path)['audio'])
+            self.assertEqual(fetch.call_count, 3)
+            code, audio = self.call('--evidence', good['manifest'], '--get', 'audio')
+            self.assertEqual(code, 0, audio)
+            audio_path = next(a['path'] for a in audio['artifacts'] if a['type'] == 'audio')
+            shutil.copy2(silent, audio_path)
+            code, repaired_audio = self.call('--evidence', good['manifest'], '--get', 'audio')
+            self.assertEqual(code, 0, repaired_audio)
+            restored = next(a['path'] for a in repaired_audio['artifacts'] if a['type'] == 'audio')
+            self.assertTrue(media.probe(restored)['audio'])
+            self.assertNotEqual(restored, audio_path)
             self.assertEqual(fetch.call_count, 3)
 
     def test_bilibili_old_source_quality_upgrades_video_frames_and_metadata_once(self):

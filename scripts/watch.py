@@ -268,7 +268,15 @@ class Watch:
         return None
 
     def interval(self):
-        return self.args.begin, self.args.finish if self.args.finish is not None else self.duration()
+        duration = self.duration()
+        self.check_range(duration)
+        return self.args.begin, self.args.finish if self.args.finish is not None else duration
+
+    def check_range(self, duration):
+        if duration is not None and (self.args.begin >= duration or
+                self.args.finish is not None and self.args.finish > duration + 0.001):
+            raise media.Failure('range_out_of_bounds',
+                                f'Requested interval is outside the source duration ({duration:g}s).')
 
     def matching(self, kind, start, end):
         for a in self.data['artifacts']:
@@ -276,16 +284,28 @@ class Watch:
                 continue
             if kind in ('transcript', 'audio', 'video') and self.args.audio_track is not None and a.get('audio_track') != self.args.audio_track:
                 continue
+            if kind in ('transcript', 'audio', 'video') and self.args.audio_track is None and a.get('audio_track') is not None:
+                if a.get('audio_track_default') is False:
+                    continue
+                if (not self.local and not a.get('internal')
+                        and a.get('audio_track_default') is None):
+                    continue
+                if self.local and a['audio_track'] != media.audio_index(self.info or media.probe(self.local)):
+                    continue
             if kind == 'transcript' and self.args.language and a.get('language') != self.args.language:
+                continue
+            if kind == 'transcript' and self.args.language is None and (
+                    'requested_language' not in a or a['requested_language'] is not None):
                 continue
             if kind == 'video' and (a.get('frames_only') or
                 not self.current_quality(a) or
                 (self.access_context is not None and a.get('access_context') != self.access_context) or
                 (self.args.quality != 'auto' and a.get('quality') not in (self.args.quality, 'source') and not a.get('external'))):
                 continue
-            if kind == 'video':
+            if kind in ('video', 'audio'):
                 info = media.probe(manifest.artifact_path(self.directory, a))
-                if not info['video'] or (a.get('audio_track') is not None and not info['audio']):
+                if (kind == 'video' and not info['video'] or
+                        (kind == 'audio' or a.get('audio_track') is not None) and not info['audio']):
                     continue
             return a
         return None
@@ -315,6 +335,14 @@ class Watch:
                     continue
                 path = manifest.artifact_path(self.directory, a)
                 info = media.probe(path)
+                if purpose in ('audio', 'video') and not a.get('internal'):
+                    # Exports can select a different source track and renumber it.
+                    if (self.args.audio_track is None and a.get('audio_track_default') is not True
+                            or self.args.audio_track is not None and a.get('audio_track') != self.args.audio_track):
+                        continue
+                    if info['audio'] and (a.get('audio_track') not in {s['index'] for s in info['audio']}
+                            or self.args.audio_track is None and a.get('audio_track') != media.audio_index(info)):
+                        continue
                 if purpose == 'video' and (not info['video'] or
                         (a.get('audio_track') is not None and not info['audio'])):
                     continue
@@ -326,7 +354,10 @@ class Watch:
                                             and (not ceiling or info['video']['width'] < ceiling)):
                         continue
                 if self.args.audio_track is not None:
-                    media.audio_index(info, self.args.audio_track)
+                    try:
+                        media.audio_index(info, self.args.audio_track)
+                    except media.Failure:
+                        continue
                 return path, info
         cached_source = dict(self.data['source'])
         resolved = self.resolve(media_needed=True)
@@ -408,6 +439,7 @@ class Watch:
             fields['height'] = info['video']['height']
         if info['audio']:
             fields['audio_track'] = media.audio_index(info, self.args.audio_track)
+            fields['audio_track_default'] = fields['audio_track'] == media.audio_index(info)
         self.add('audio' if purpose == 'audio' else 'video', path, **fields)
         return path, info
 
@@ -423,6 +455,7 @@ class Watch:
             segments = media.subtitle_range(data['segments'], start, end)
             language, origin = existing.get('language'), existing.get('origin')
             track = existing.get('audio_track')
+            track_default = existing.get('audio_track_default')
         else:
             candidate = None
             if self.local:
@@ -444,6 +477,7 @@ class Watch:
                         raise media.Failure('subtitle_absent', 'The subtitle track contains no valid speech segments.')
                     segments = media.subtitle_range(all_segments, start, end)
                     language, origin, track = candidate.get('language'), candidate.get('origin', 'platform_unknown'), None
+                    track_default = None
                 except (ValueError, OSError, media.Failure) as exc:
                     subtitle_error = exc
                     candidate = None
@@ -460,21 +494,26 @@ class Watch:
                                         'No usable subtitle was obtained; local ASR is not configured.',
                                         'Provide subtitles or prepare ASR and set AGENT_VIDEO_ASR_MODEL.')
                 path, info = shared if shared and shared[1]['audio'] else self.acquire('audio')
+                self.check_range(info['duration'])
                 track = media.audio_index(info, self.args.audio_track)
+                track_default = track == media.audio_index(info)
                 data = media.transcribe(path, info, start, self.args.finish, self.args.language, track, model)
                 segments, language, origin = data['segments'], data['language'], 'asr'
                 end = self.args.finish if self.args.finish is not None else info['duration']
         span = {'start': start, 'end': end}
         path, readable = media.transcript_files(self.directory, segments, language, origin, span)
         fields = {'source_range': span, 'language': language, 'origin': origin,
+                  'requested_language': self.args.language,
                   'readable_path': str(readable.relative_to(self.directory))}
         if track is not None:
             fields['audio_track'] = track
+            fields['audio_track_default'] = track_default
         self.deliver(self.add('transcript', path, **fields))
 
     def frame_times(self, info):
         if self.args.times is not None:
             return list(dict.fromkeys(self.args.times))
+        self.check_range(info['duration'])
         start = self.args.begin
         end = self.args.finish if self.args.finish is not None else info['duration']
         if start >= info['duration'] or end <= start:
@@ -526,9 +565,8 @@ class Watch:
                 self.deliver(existing)
                 return
         path, info = shared
+        self.check_range(info['duration'])
         end = self.args.finish if self.args.finish is not None else info['duration']
-        if start >= info['duration']:
-            raise media.Failure('range_out_of_bounds', 'Requested interval begins beyond the source.')
         track = media.audio_index(info, self.args.audio_track) if info['audio'] else None
         suffix = path.suffix if kind == 'video' and start == 0 and self.args.finish is None else ('.mkv' if kind == 'video' else '.mka')
         dest = self.directory / kind / (uuid.uuid4().hex[:10] + suffix)
@@ -542,6 +580,7 @@ class Watch:
         fields = {'source_range': {'start': start, 'end': end}, 'transcoded': details['transcoded']}
         if track is not None:
             fields['audio_track'] = track
+            fields['audio_track_default'] = track == media.audio_index(info)
         if kind == 'video':
             fields['quality'] = 'source' if self.local else self.args.quality
             fields['access_context'] = self.access_context
@@ -564,8 +603,16 @@ class Watch:
         # Merge dependent requests: one media fetch, richest requested material wins.
         shared = None
         wanted = set(self.args.kinds)
+        wanted_to_process = wanted
+        if wanted - {'info'}:
+            try:
+                self.interval()
+            except media.Failure as exc:
+                self.fail('range', exc)
+                # Metadata and previously completed evidence remain available.
+                wanted_to_process = set()
         for kind in ('video', 'audio'):
-            if kind not in wanted:
+            if kind not in wanted_to_process:
                 continue
             start, end = self.interval()
             cached = self.matching(kind, start, end)
@@ -574,7 +621,7 @@ class Watch:
                 self.completed.add(kind)
         # Standalone frames remain reusable when they already meet the requested
         # width. Smaller frames must consult the saved media ceiling before reuse.
-        if ('frames' in wanted and self.args.times is not None and self.access_context is None
+        if ('frames' in wanted_to_process and self.args.times is not None and self.access_context is None
                 and (self.args.quality == 'auto' or self.args.width == 0)):
             cached_frames = [next((a for a in self.data['artifacts'] if a['type'] == 'frames'
                 and self.current_quality(a)
@@ -586,15 +633,15 @@ class Watch:
                 for cached in cached_frames:
                     self.deliver(cached)
                 self.completed.add('frames')
-        need_visual = bool({'video', 'frames'} & (wanted - self.completed))
-        need_audio = 'audio' in wanted - self.completed
+        need_visual = bool({'video', 'frames'} & (wanted_to_process - self.completed))
+        need_audio = 'audio' in wanted_to_process - self.completed
         if need_visual or need_audio:
             try:
                 shared = self.acquire('video' if 'video' in wanted or (need_visual and (need_audio or ('transcript' in wanted and media.asr_ready(os.environ.get('AGENT_VIDEO_ASR_MODEL'))))) else 'frames' if need_visual else 'audio')
             except Exception as exc:
                 self.fail('media', exc)
         for kind in self.args.kinds:
-            if kind in self.completed:
+            if kind in self.completed or kind not in wanted_to_process:
                 continue
             try:
                 if kind == 'transcript':
