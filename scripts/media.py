@@ -136,7 +136,12 @@ def parse_subtitles(text, ext):
     """VTT/SRT, Bilibili JSON and yt-dlp JSON3. Never parse danmaku XML."""
     segments = []
     if ext in ('json', 'json3'):
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            message = 'Subtitle response is empty.' if not text.strip() else 'Subtitle response is not valid JSON.'
+            raise Failure('invalid_subtitles', message,
+                          'Retry later or provide a local subtitle file.') from None
         if isinstance(data, dict) and 'body' in data:
             segments = [{'start': x['from'], 'end': x['to'], 'text': x['content']} for x in data['body']]
         elif isinstance(data, dict) and 'events' in data:

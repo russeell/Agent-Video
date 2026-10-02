@@ -78,6 +78,41 @@ class WatchTests(unittest.TestCase):
                     data = json.loads(Path(bad['manifest']).read_text())
                     self.assertEqual([a['type'] for a in data['artifacts']], ['info'])
 
+    def test_invalid_subtitle_response_preserves_frames_and_allows_retry(self):
+        from scripts import platforms
+        source = {'platform': 'youtube', 'id': 'abcdefghijk',
+                  'url': 'https://www.youtube.com/watch?v=abcdefghijk'}
+        resolved = {'source': source, 'metadata': {'duration': 2, 'original_language': 'en'},
+                    'subtitles': [{'url': 'https://example.test/captions', 'ext': 'json3',
+                                   'language': 'en', 'origin': 'platform_manual'}],
+                    'formats': [{'url': 'https://example.test/video', 'has_video': True,
+                                 'has_audio': True, 'width': 160, 'height': 120}], 'diagnostics': []}
+        valid = json.dumps({'events': [{'tStartMs': 200, 'dDurationMs': 800,
+                                       'segs': [{'utf8': 'Actual subtitle text'}]}]})
+        def download(resolved, directory, **kwargs):
+            directory.mkdir(parents=True, exist_ok=True)
+            dest = directory / 'source.mp4'
+            shutil.copy2(self.video, dest)
+            return dest
+        with patch.dict('os.environ', {'AGENT_VIDEO_ASR_MODEL': ''}), \
+                patch.object(platforms, 'resolve', return_value=resolved), \
+                patch.object(platforms, 'fetch_subtitle', side_effect=['', valid]) as subtitles, \
+                patch.object(platforms, 'download', side_effect=download) as fetch:
+            code, first = self.call(source['url'], '--out', str(self.root / 'out'),
+                                    '--get', 'transcript,frames', '--at', '0.2')
+            self.assertEqual(code, 2, first)
+            self.assertEqual([a['type'] for a in first['artifacts']], ['info', 'frames'])
+            self.assertTrue(any(d['code'] == 'invalid_subtitles' for d in first['diagnostics']))
+            frame = Path(next(a['path'] for a in first['artifacts'] if a['type'] == 'frames'))
+            original = frame.read_bytes()
+            code, recovered = self.call('--evidence', first['manifest'], '--get', 'transcript')
+            self.assertEqual(code, 0, recovered)
+            text = next(a['path'] for a in recovered['artifacts'] if a['type'] == 'transcript')
+            self.assertEqual(json.loads(Path(text).read_text())['segments'][0]['start'], .2)
+            self.assertEqual(frame.read_bytes(), original)
+            self.assertEqual(subtitles.call_count, 2)
+            self.assertEqual(fetch.call_count, 1)
+
     def test_selected_audio_track_does_not_replace_default_in_followups(self):
         multi = self.root / 'two-tracks.mp4'
         subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', self.video,

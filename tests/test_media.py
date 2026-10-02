@@ -37,6 +37,18 @@ class SubtitleTests(unittest.TestCase):
                 media.clock(value)
         self.assertEqual(media.parse_subtitles('{"body":[{"from":1,"to":2,"content":"你好"}]}', 'json')[0]['text'], '你好')
 
+    def test_invalid_json_subtitle_responses_are_not_absent_subtitles(self):
+        for ext in ('json', 'json3'):
+            for text in ('', ' \n\t', '<html>Unavailable</html>', '{"events":'):
+                with self.subTest(ext=ext, text=text), self.assertRaises(media.Failure) as caught:
+                    media.parse_subtitles(text, ext)
+                self.assertEqual(caught.exception.code, 'invalid_subtitles')
+                self.assertTrue(caught.exception.next_action)
+                if text.strip():
+                    self.assertNotIn(text.strip(), str(caught.exception))
+            with self.subTest(ext=ext, valid_empty=True):
+                self.assertEqual(media.parse_subtitles('{"events":[]}', ext), [])
+
 
 @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg and ffprobe required')
 class RealMediaTests(unittest.TestCase):
