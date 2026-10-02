@@ -2,10 +2,12 @@
 from __future__ import annotations
 import argparse
 import hashlib
+from importlib.metadata import PackageNotFoundError, version
 import json
 import os
 from pathlib import Path
 import sys
+import tomllib
 import uuid
 from urllib.parse import urlsplit, parse_qs
 
@@ -34,6 +36,12 @@ def parser():
                '  agent-video --evidence manifest.json --get frames --at 01:23 --width 1600\n'
                '  agent-video --evidence manifest.json --get video',
                formatter_class=argparse.RawDescriptionHelpFormatter)
+    try:
+        current_version = version('agent-video')
+    except PackageNotFoundError:
+        project_file = Path(__file__).resolve().parents[1] / 'pyproject.toml'
+        current_version = tomllib.loads(project_file.read_text(encoding='utf-8'))['project']['version']
+    p.add_argument('--version', action='version', version='agent-video ' + current_version)
     p.add_argument('source', nargs='?')
     p.add_argument('--evidence')
     p.add_argument('--get', default='transcript')
@@ -241,7 +249,7 @@ class Watch:
             return
         if self.local:
             self.info = media.probe(self.local)
-            metadata = dict.fromkeys(['author', 'description', 'published_at', 'thumbnail', 'views', 'likes', 'comments'])
+            metadata = dict.fromkeys(['author', 'description', 'published_at', 'thumbnail', 'view_count', 'like_count', 'comment_count'])
             metadata.update(platform='local', id=self.local.stem, source=str(self.local), title=self.local.name,
                             duration=self.info['duration'])
         else:
@@ -301,7 +309,7 @@ class Watch:
             if kind == 'video' and (a.get('frames_only') or
                 not self.current_quality(a) or
                 (self.access_context is not None and a.get('access_context') != self.access_context) or
-                (self.args.quality != 'auto' and a.get('quality') not in (self.args.quality, 'source') and not a.get('external'))):
+                (self.args.quality != 'auto' and a.get('quality') not in (self.args.quality, 'source'))):
                 continue
             if kind in ('video', 'audio'):
                 info = media.probe(manifest.artifact_path(self.directory, a))
@@ -562,9 +570,8 @@ class Watch:
         start, end = self.interval()
         existing = self.matching(kind, start, end)
         if existing and existing['source_range'] == {'start': start, 'end': end}:
-            if not (kind == 'video' and existing.get('external')):
-                self.deliver(existing)
-                return
+            self.deliver(existing)
+            return
         path, info = shared
         self.check_range(info['duration'])
         end = self.args.finish if self.args.finish is not None else info['duration']

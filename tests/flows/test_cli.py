@@ -1,5 +1,6 @@
 """Exercise the installed console script from outside the source directory."""
 import json
+from importlib.metadata import version
 import os
 from pathlib import Path
 import shutil
@@ -38,6 +39,20 @@ class ConsoleTests(unittest.TestCase):
                                 cwd=self.root, capture_output=True, text=True, check=False)
         self.assertEqual(direct.returncode, 0, direct.stderr)
         self.assertIn('--evidence', direct.stdout)
+
+    def test_version_and_source_checkout_fallback(self):
+        expected = 'agent-video ' + version('agent-video')
+        installed = self.call('--version')
+        self.assertEqual(installed.returncode, 0, installed.stderr)
+        self.assertEqual(installed.stdout.strip(), expected)
+        # -S excludes installed distribution metadata, exercising the checkout.
+        environment = os.environ.copy()
+        environment.pop('PYTHONPATH', None)
+        direct = subprocess.run([sys.executable, '-S',
+                                 str(Path(__file__).resolve().parents[2] / 'scripts/watch.py'), '--version'],
+                                cwd=self.root, env=environment, capture_output=True, text=True, check=False)
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+        self.assertEqual(direct.stdout.strip(), expected)
 
     @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg is required')
     def test_local_subtitles_and_manifest_reuse(self):

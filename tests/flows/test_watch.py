@@ -42,6 +42,11 @@ class WatchTests(unittest.TestCase):
         evidence = result['manifest']
         text = next(a for a in result['artifacts'] if a['type'] == 'transcript')
         self.assertEqual(json.loads(Path(text['path']).read_text())['segments'][0]['text'], 'Hello world')
+        metadata = json.loads(Path(next(a['path'] for a in result['artifacts'] if a['type'] == 'info')).read_text())
+        for field in ('view_count', 'like_count', 'comment_count'):
+            self.assertIn(field, metadata)
+            self.assertIsNone(metadata[field])
+        self.assertTrue({'views', 'likes', 'comments'}.isdisjoint(metadata))
         code, result = self.call('--evidence', evidence, '--get', 'frames', '--at', '0.2', '--width', '80')
         self.assertEqual(code, 0, result)
         frame = next(a for a in result['artifacts'] if a['type'] == 'frames')

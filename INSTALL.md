@@ -1,6 +1,6 @@
 # Install Agent Video
 
-Instructions for coding agents setting up Agent Video for the first time. If it is already installed, follow [UPDATE.md](UPDATE.md). Use an existing checkout when available; otherwise clone the public repository into the user's workspace. Keep the whole project in place: the host Skill links to it, including its `.venv`.
+Instructions for coding agents setting up Agent Video for the first time. If it is already installed, follow [UPDATE.md](UPDATE.md). Reuse an existing checkout; otherwise choose a dedicated, stable tools directory, such as `~/.local/share/agent-video` or the user's existing tools folder. Do not clone into the current business repository unless the user explicitly asks. Keep the whole project in place: the host Skill links to it, including its `.venv`.
 
 ## Install
 
@@ -12,11 +12,14 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Install missing prerequisites with the environment's package manager (for example, `brew install ffmpeg` on macOS or `sudo apt-get install ffmpeg` on Ubuntu).
+Obtain explicit user confirmation before using `sudo`, administrator privileges or making system-wide package-manager changes, including `brew` or `apt` installs. Prerequisite checks, the project's virtual environment and installs within it do not require elevated privileges.
+
+If no checkout exists, the following uses a dedicated tools directory; otherwise enter the existing checkout and skip cloning.
 
 ```bash
-git clone https://github.com/russeell/Agent-Video.git
-cd Agent-Video
+mkdir -p "$HOME/.local/share"
+git clone https://github.com/russeell/Agent-Video.git "$HOME/.local/share/agent-video"
+cd "$HOME/.local/share/agent-video"
 # Create this only if no suitable .venv exists
 python3 -m venv .venv
 .venv/bin/python -m pip install -e .
@@ -41,9 +44,12 @@ Use the appropriate host block. Start a new session; restart the host if the Ski
 
 ## Windows
 
-In PowerShell, use `python` and `.venv\Scripts\` instead of the Unix paths. After cloning:
+In PowerShell, use `python` and `.venv\Scripts\` instead of the Unix paths. Reuse an existing checkout, or choose a dedicated tools directory, for example:
 
 ```powershell
+git clone https://github.com/russeell/Agent-Video.git "$env:LOCALAPPDATA\agent-video"
+Set-Location "$env:LOCALAPPDATA\agent-video"
+# Create this only if no suitable .venv exists
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 .\.venv\Scripts\agent-video.exe --help
@@ -55,7 +61,7 @@ Use `.claude` instead of `.agents` for Claude Code. Check existing links first. 
 
 ## Douyin
 
-Install **Google Chrome or Chromium** to read Douyin videos. Agent Video starts the installed browser headlessly in a temporary, empty profile to obtain the work's data; it does not read your existing browser profile or cookies. Downloads and media processing use Agent Video's own code.
+Douyin requires **Google Chrome**, or **Chromium with its executable on `PATH`**. Agent Video starts the installed browser headlessly in a temporary, empty profile to obtain the work's data; it does not read your existing browser profile or cookies. Downloads and media processing use Agent Video's own code.
 
 Chrome is detected in its normal macOS / Windows location, or `google-chrome`, `chromium` or `chromium-browser` on `PATH`. Interactive verification or login pages may still prevent access; these are not automated.
 
@@ -93,7 +99,7 @@ Defaults to CPU/int8; normal calls do not download models. Speech-to-text may co
 
 ## Verify
 
-Run `agent-video --help` from the project environment, then read [SKILL.md](SKILL.md). With a supported URL or local video, request only the needed evidence:
+Run `agent-video --help` and `agent-video --version` from the project environment, then read [SKILL.md](SKILL.md). With a supported URL or local video, request only the needed evidence:
 
 ```bash
 .venv/bin/agent-video "<video-url-or-local-file>" --get transcript

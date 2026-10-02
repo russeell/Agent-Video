@@ -39,7 +39,7 @@ Install Agent Video by following this guide:
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-Requires **Python 3.11+** and **FFmpeg**; Douyin also needs **Chrome or Chromium**. The [installation guide](INSTALL.md) covers setup, Windows and optional speech-to-text.
+Requires **Python 3.11+** and **FFmpeg**; Douyin also needs **Google Chrome**, or **Chromium with its executable on `PATH`**. The [installation guide](INSTALL.md) covers setup, Windows and optional speech-to-text.
 
 After installation, ask your agent to use Agent Video with a link or local file.
 
@@ -64,7 +64,7 @@ The [update guide](UPDATE.md) keeps your Skill link, environment, models and sav
 | **YouTube** | Read captions and download public videos and Shorts; 1080p downloads tested |
 | **Bilibili** | Read available captions and download public videos, including a chosen part; 1080p downloads tested |
 | **TikTok** | Experimental: transcripts, downloads and screenshots tested on two public videos |
-| **Douyin** | Experimental: information, 1080p downloads with audio and screenshots tested on one public video; needs Chrome or Chromium |
+| **Douyin** | Experimental: information, 1080p downloads with audio and screenshots tested on one public video; requires the browser setup above |
 
 Other websites, direct media links, live streams and DRM-protected videos are not supported. You can use a downloaded file as local input.
 
@@ -86,9 +86,9 @@ After installation, run from the project directory:
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
 ```
 
-`--get` accepts `info,transcript,frames,audio,video`, separately or together. Files are saved in `.agent-video/` by default. The command returns JSON with file paths and a `manifest.json` that tracks saved materials for reuse. If one step fails, successful files are still kept.
+`--get` accepts `info,transcript,frames,audio,video`, separately or together. Files are saved in `.agent-video/` by default. The command returns JSON with file paths and a `manifest.json` that tracks saved materials for reuse. Exit code `2` means partial success; completed files remain usable.
 
-See `--help` for time ranges, language, quality, video parts and Cookie files. Windows uses `.venv\Scripts\agent-video.exe`.
+See `--help` for time ranges, language, quality, video parts and Cookie files; `--version` shows the installed version. Windows uses `.venv\Scripts\agent-video.exe`.
 
 </details>
 

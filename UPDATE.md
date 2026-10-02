@@ -53,6 +53,7 @@ For a uv-managed environment without pip, use `uv pip install --python .venv/bin
 
 ```bash
 .venv/bin/agent-video --help
+.venv/bin/agent-video --version
 ```
 
 Confirm that the existing command runs and the Skill link still points to this checkout. Start a new host session to load the updated [SKILL.md](SKILL.md). If you have a local video or saved manifest, request only the material you need and check its returned files; an update check does not need a network download or ASR run.

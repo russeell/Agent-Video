@@ -39,7 +39,7 @@ Agent Video 为 Agent 提供所需的**文字稿、截图、音频、视频文�
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-需要 **Python 3.11+** 和 **FFmpeg**；抖音还需要 **Chrome 或 Chromium**。[安装指南](INSTALL.md) 包含首次安装、Windows 和可选语音转文字的步骤。
+需要 **Python 3.11+** 和 **FFmpeg**；抖音还需要 **Google Chrome**，或可在 `PATH` 找到可执行文件的 **Chromium**。[安装指南](INSTALL.md) 包含首次安装、Windows 和可选语音转文字的步骤。
 
 安装后，给 Agent 一个链接或本地文件，让它使用 Agent Video。
 
@@ -64,7 +64,7 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
 | **YouTube** | 读取字幕，下载公开视频和 Shorts；已验证 1080p 下载 |
 | **Bilibili** | 读取可用字幕，下载公开视频，也可以指定分 P；已验证 1080p 下载 |
 | **TikTok** | 实验支持：已用两个公开视频验证文字稿、下载和截图 |
-| **抖音** | 实验支持：已验证一个公开视频的信息、1080p 有声下载和截图；需要 Chrome 或 Chromium |
+| **抖音** | 实验支持：已验证一个公开视频的信息、1080p 有声下载和截图；需要上述浏览器环境 |
 
 暂不支持其他网站、媒体直链、直播和 DRM 加密视频。已经下载的视频可以作为本地文件使用。
 
@@ -86,9 +86,9 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
 ```
 
-`--get` 支持 `info,transcript,frames,audio,video`，可以单独获取，也可以组合。文件默认保存在 `.agent-video/`。命令返回 JSON，其中有文件路径和用于记录、复用材料的 `manifest.json`。某一步失败时，已经成功获取的文件仍会保留。
+`--get` 支持 `info,transcript,frames,audio,video`，可以单独获取，也可以组合。文件默认保存在 `.agent-video/`。命令返回 JSON，其中有文件路径和用于记录、复用材料的 `manifest.json`。退出码 `2` 表示部分成功，已完成的文件仍可使用。
 
-时间范围、语言、画质、分 P 和 Cookie 文件等参数见 `--help`。Windows 使用 `.venv\Scripts\agent-video.exe`。
+时间范围、语言、画质、分 P 和 Cookie 文件等参数见 `--help`；`--version` 显示安装版本。Windows 使用 `.venv\Scripts\agent-video.exe`。
 
 </details>
 
