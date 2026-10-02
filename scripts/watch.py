@@ -1,8 +1,8 @@
 """One entry point for obtaining and reusing video evidence."""
 from __future__ import annotations
 import argparse
+import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import sys
@@ -145,6 +145,12 @@ class Watch:
         self.info = None
         self.local = None
         self.completed = set()
+        self.access_context = None
+        if args.cookies:
+            cookie_file = Path(args.cookies).resolve()
+            stat = cookie_file.stat()
+            # Identify a changed explicit credential file without retaining its path or contents.
+            self.access_context = hashlib.sha256(f'{cookie_file}:{stat.st_size}:{stat.st_mtime_ns}'.encode()).hexdigest()
         if args.evidence:
             try:
                 self.path, self.data = manifest.load(args.evidence)
@@ -261,6 +267,7 @@ class Watch:
             if kind == 'transcript' and self.args.language and a.get('language') != self.args.language:
                 continue
             if kind == 'video' and (a.get('frames_only') or
+                (self.access_context is not None and a.get('access_context') != self.access_context) or
                 (self.args.quality != 'auto' and a.get('quality') not in (self.args.quality, 'source') and not a.get('external'))):
                 continue
             return a
@@ -276,6 +283,8 @@ class Watch:
                     continue
                 if purpose == 'video' and a.get('frames_only'):
                     continue
+                if purpose != 'audio' and self.access_context is not None and a.get('access_context') != self.access_context:
+                    continue
                 if purpose != 'audio' and self.args.quality != 'auto' and a.get('quality') not in (self.args.quality, 'source'):
                     continue
                 path = manifest.artifact_path(self.directory, a)
@@ -283,7 +292,9 @@ class Watch:
                 if purpose == 'audio' and not info['audio']:
                     continue
                 if purpose == 'frames' and a.get('quality') != 'source':
-                    if not info['video'] or self.args.width == 0 or info['video']['width'] < self.args.width:
+                    ceiling = a.get('available_max_width')
+                    if not info['video'] or ((self.args.width == 0 or info['video']['width'] < self.args.width)
+                                            and (not ceiling or info['video']['width'] < ceiling)):
                         continue
                 if self.args.audio_track is not None:
                     media.audio_index(info, self.args.audio_track)
@@ -293,9 +304,34 @@ class Watch:
             from . import platforms
         else:
             import platforms
+        want_video = {'video': True, 'frames': 'frames', 'audio': False}[purpose]
+        formats = resolved.get('formats', [])
+        selected = platforms.select_formats(formats, want_video=want_video, quality=self.args.quality,
+                                            width=self.args.width) if formats else []
+        visual = next((f for f in selected if f.get('has_video')), None)
+        max_width = max((f.get('width') or 0 for f in formats if f.get('has_video')), default=0)
+        # Old evidence has no ceiling marker. Resolve once, then compare actual files
+        # with the chosen format rather than downloading the same low-quality stream.
+        if purpose == 'frames' and self.args.quality == 'auto' and self.args.width > 0 and visual and visual.get('width') and visual.get('height'):
+            for a in self.data['artifacts']:
+                if a['type'] != 'video' or not manifest.covers(a, 0, full_end) or (purpose == 'video' and a.get('frames_only')):
+                    continue
+                if self.access_context is not None and a.get('access_context') != self.access_context:
+                    continue
+                path = manifest.artifact_path(self.directory, a)
+                info = media.probe(path)
+                if not info['video'] or info['video']['width'] < visual['width'] or info['video']['height'] < visual['height']:
+                    continue
+                if any(f.get('has_audio') for f in selected) and not info['audio']:
+                    continue
+                if self.args.audio_track is not None:
+                    media.audio_index(info, self.args.audio_track)
+                a.update(available_max_width=max_width, access_context=self.access_context)
+                self.save()
+                return path, info
         print('Obtaining required media…', file=sys.stderr)
         path = Path(platforms.download(resolved, self.directory / ('video' if purpose != 'audio' else 'audio'),
-                                      want_video={'video': True, 'frames': 'frames', 'audio': False}[purpose],
+                                      want_video=want_video,
                                       quality=self.args.quality, width=self.args.width, cookies=self.args.cookies)).resolve()
         if not path.is_file() or path.stat().st_size == 0:
             raise media.Failure('invalid_media', 'Download did not produce a nonempty file.')
@@ -305,6 +341,9 @@ class Watch:
         if purpose == 'audio':
             media.audio_index(info, self.args.audio_track)
         fields = {'source_range': {'start': 0, 'end': info['duration']}, 'quality': 'source' if purpose == 'frames' and self.args.width == 0 else self.args.quality, 'internal': True}
+        fields['access_context'] = self.access_context
+        if max_width:
+            fields['available_max_width'] = max_width
         if purpose == 'frames':
             fields['frames_only'] = True
         if info['video']:
@@ -389,11 +428,18 @@ class Watch:
 
     def frames(self, shared):
         path, info = shared
+        if info['video'] and self.args.width and info['video']['width'] < self.args.width:
+            self.fail('frames', media.Failure('quality_insufficient',
+                f'Requested frame width {self.args.width}px; available media is {info["video"]["width"]}×{info["video"]["height"]}. Frames retain the available resolution without upscaling.',
+                'Use the available frames, provide a higher-resolution local file, or explicitly supply new credentials / quality to check for an upgrade.'))
         times = self.frame_times(info)
         missing = []
         for time in times:
             existing = next((a for a in self.data['artifacts'] if a['type'] == 'frames' and
                              abs(a.get('requested_time', -1) - time) < 0.000001 and
+                             (self.access_context is None or a.get('access_context') == self.access_context) and
+                             (self.args.quality == 'auto' and self.args.width > 0 or
+                              a.get('quality') == ('source' if self.args.width == 0 else self.args.quality)) and
                              a.get('width', 0) >= (min(self.args.width, info['video']['width']) if self.args.width else info['video']['width'])), None) if info['video'] else None
             if existing:
                 self.deliver(existing)
@@ -408,7 +454,8 @@ class Watch:
                 continue
             frame = dict(frame)
             dest = frame.pop('path')
-            self.deliver(self.add('frames', dest, **frame))
+            self.deliver(self.add('frames', dest, quality='source' if self.args.width == 0 else self.args.quality,
+                                  access_context=self.access_context, **frame))
         if failures:
             return False
         return True
@@ -439,6 +486,13 @@ class Watch:
             fields['audio_track'] = track
         if kind == 'video':
             fields['quality'] = 'source' if self.local else self.args.quality
+            fields['access_context'] = self.access_context
+            fields['width'] = verified['video']['width']
+            fields['height'] = verified['video']['height']
+            source_artifact = next((a for a in self.data['artifacts'] if a['type'] == 'video' and
+                                    manifest.artifact_path(self.directory, a) == path), None)
+            if source_artifact and source_artifact.get('available_max_width'):
+                fields['available_max_width'] = source_artifact['available_max_width']
         self.deliver(self.add(kind, dest, **fields))
 
     def run(self):
@@ -460,16 +514,16 @@ class Watch:
             if cached and cached.get('source_range') == {'start': start, 'end': end}:
                 self.deliver(cached)
                 self.completed.add(kind)
-        if 'frames' in wanted and self.args.times is not None:
-            cached_frames = []
-            for time in dict.fromkeys(self.args.times):
-                cached = next((a for a in self.data['artifacts'] if a['type'] == 'frames' and
-                    abs(a.get('requested_time', -1) - time) < 0.000001 and
-                    a.get('width', 0) >= (min(self.args.width, a.get('source_width', self.args.width))
-                                         if self.args.width else a.get('source_width', math.inf))), None)
-                if cached:
-                    cached_frames.append(cached)
-            if len(cached_frames) == len(set(self.args.times)):
+        # Standalone frames remain reusable when they already meet the requested
+        # width. Smaller frames must consult the saved media ceiling before reuse.
+        if ('frames' in wanted and self.args.times is not None and self.access_context is None
+                and (self.args.quality == 'auto' or self.args.width == 0)):
+            cached_frames = [next((a for a in self.data['artifacts'] if a['type'] == 'frames'
+                and abs(a.get('requested_time', -1) - time) < 0.000001
+                and (a.get('width', 0) >= self.args.width if self.args.width else
+                     a.get('quality') == 'source' and a.get('width') == a.get('source_width'))), None)
+                for time in dict.fromkeys(self.args.times)]
+            if all(cached_frames):
                 for cached in cached_frames:
                     self.deliver(cached)
                 self.completed.add('frames')

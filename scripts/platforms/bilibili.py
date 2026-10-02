@@ -53,6 +53,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
     result = {'source': {'platform': 'bilibili', 'id': bvid, 'url': canonical, 'part': chosen, 'cid': cid},
               'metadata': {'platform': 'bilibili', 'id': bvid, 'url': canonical, 'title': view.get('title'),
                            'part_title': page.get('part'), 'part': chosen, 'cid': cid,
+                           'declared_dimensions': page.get('dimension') or view.get('dimension'),
                            'author': (view.get('owner') or {}).get('name'), 'description': view.get('desc'),
                            'published_at': view.get('pubdate'), 'duration': page.get('duration'),
                            'thumbnail': view.get('pic'), 'view_count': stats.get('view'),
@@ -90,6 +91,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
                         result['formats'].append({'url': address, 'ext': 'mp4' if kind == 'video' else 'm4a',
                                                   'width': stream.get('width'), 'height': stream.get('height'),
                                                   'has_video': kind == 'video', 'has_audio': kind == 'audio',
+                                                  'quality_id': stream.get('id') if kind == 'video' else None,
                                                   'bitrate': stream.get('bandwidth'), 'headers': HEADERS})
             if not result['formats']:
                 segments = play.get('durl') or []
@@ -102,6 +104,21 @@ def resolve(url, *, part=None, cookies=None, need=None):
                     raise Failure('format_unsupported', 'Bilibili returned a multi-file segmented resource; this path is not implemented.')
                 else:
                     raise Failure('media_unavailable', 'Bilibili returned no usable media streams.')
+            available = {f['quality_id'] for f in result['formats'] if f.get('has_video') and f.get('quality_id') is not None}
+            supported = [{'quality_id': f.get('quality'), 'label': f.get('new_description') or f.get('display_desc'),
+                          **{k: f[k] for k in ('need_login', 'need_vip') if k in f}}
+                         for f in play.get('support_formats', [])]
+            result['metadata']['quality_info'] = {
+                'available_sizes': sorted({(f['width'], f['height']) for f in result['formats']
+                                           if f.get('has_video') and f.get('width') and f.get('height')}),
+                'available_quality_ids': sorted(available), 'supported_qualities': supported}
+            missing = [f for f in supported if f['quality_id'] not in available]
+            if available and missing:
+                names = ', '.join(str(f['label'] or f['quality_id']) for f in missing)
+                sizes = ', '.join(f'{w}×{h}' for w, h in result['metadata']['quality_info']['available_sizes']) or 'unknown dimensions'
+                result['diagnostics'].append(diagnostic('media', Failure(
+                    'quality_unavailable', f'Bilibili advertises {names}, but returned no streams for these qualities under current access conditions. Available video sizes: {sizes}; quality IDs: {sorted(available)}. Advertised qualities are not accessible formats.',
+                    'Use the returned quality or provide your own authorized Cookie file to check availability; higher quality is not guaranteed.')))
         except Failure as exc:
             result['diagnostics'].append(diagnostic('media', exc))
     result['metadata']['audio_expected'] = any(f['has_audio'] for f in result['formats']) if result['formats'] else None
