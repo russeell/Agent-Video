@@ -2,7 +2,7 @@
 
 **Let your agent watch videos.**
 
-给 Agent 一个视频链接或本地文件，让它按问题获取文字、画面、音频、视频和信息。所有材料保存在同一个结果目录，方便继续追问和直接交付文件。
+给 Agent 一个视频链接、本地文件或视频需求，让它按问题获取文字、画面、音频、视频和信息。寻找视频时，宿主先搜索候选，Agent Video 再按需提供内容证据。所有材料保存在同一个结果目录，方便继续追问和直接交付文件。
 
 平台解析与下载由本项目实现，不需要安装 yt-dlp、F2 或 BBDownT。FFmpeg / ffprobe 用于底层媒体处理；本地语音转录可选。
 
@@ -59,6 +59,10 @@ Windows 后续调用使用 `.venv\Scripts\python.exe`。其他宿主支持 Agent
 Skill 可用后，直接向 Agent 提问：“这个视频讲了什么”“02:10 在说什么”“提取视频文字”“下载最清晰版本”或“保存刚才的视频”，并提供链接、文件或当前视频的上下文。无需每次指定项目名称；Agent 根据请求选择材料，调用脚本后读取证据、回答或交付文件。
 
 自动匹配由宿主 Agent 决定；未触发时可明确说“使用 Agent Video”，或在 Codex 中提及 `$agent-video`、在 Claude Code 中调用 `/agent-video`。安装 Skill 不会改变网站支持范围或宿主执行权限。
+
+也可以说“找一个中文、10分钟以内、实际演示 FFmpeg 抽帧的视频”。Agent 使用宿主当前可用的搜索工具，按主题和已知条件初筛、去重，再按需求读少量候选。只要链接时无需观看；讲述内容可由字幕验证，实际操作演示需要看过画面，推荐会说明实际读过什么。中文标题不证明中文讲话，未知条件与无法读取的候选不会被当作已验证。搜索工具需要宿主提供，项目没有内置搜索接口；模糊画面描述的全网寻片不在范围内。
+
+找到后可以继续问“01:28 的命令是什么意思”“把那里截清楚”“保存这条视频”，Agent 会继续使用对应 manifest 和已有文件。
 
 以下为脚本直接调用示例：
 
@@ -132,12 +136,13 @@ export AGENT_VIDEO_ASR_MODEL="$HOME/.cache/agent-video/models/faster-whisper-sma
 |---|---|
 | 本地文件 | 信息、字幕选择、定点 / 区间帧、音视频导出和跨轮复用通过；双音轨切换实测正确，无声录屏的理解、定点追问、高清补帧和文件交付通过 |
 | Bilibili | 公开多 P 样本 P1 与 BV1ggFseVES3 的匿名信息、完整音视频和帧获取通过；后者1920×1080、约237.9秒，字幕未取得。独立 Agent 自动选择 Skill，改看高清画面后完成概括与02:10追问；随后保存仅补音频，再次保存零网络请求 |
+| 按描述寻找视频 | 宿主网页搜索与匿名 B 站搜索 API 实测可用；按主题、时长初筛后读取 BV1qt421J7MV，抽样画面确认实际 FFmpeg 操作，完成01:28追问、1920×1080补帧与完整文件交付。同材料15秒中文ASR通过；补帧、重复保存与重复转录零网络。只要链接的 Python 教程请求只取得信息；去重、未知字段、筛选后无匹配及 YouTube 无法读取画面分别检查 |
 | 通用 HTTP / HTML / HLS | 本地真实 HTTP 样本验证直链、单个 video/source、TS 和 fMP4 点播 HLS、master 变体及音轨 / 时长；不是任意网页或任意 HLS 支持 |
 | 腾讯视频（实验） | [公开短视频 q326831cny0](https://v.qq.com/x/page/q326831cny0.html) 匿名完整下载和抽帧通过：1280×720、215.958秒、H.264 + AAC；不推广到所有腾讯内容 |
 | TikTok（实验） | 公开样本信息、媒体候选与 12 段字幕获取通过；视频下载尚未实测 |
 | YouTube（实验） | 仅公开 player response 的信息、字幕及直接媒体地址路径；不处理播放器签名 / JS challenge，暂无成功线上下载验收 |
 | Douyin（实验） | 仅公开页面嵌入信息路径；未通过真实样本验收，挑战页面可能无法读取 |
-| 本地 ASR（可选） | small / CPU / int8 实测英文真人语音与中文合成语音、区间时间和文字稿复用通过；静音音轨返回 no_speech，无音轨返回 no_audio，仍交付其他材料。中文有少量错字，尚未做真人普通话质量评估 |
+| 本地 ASR（可选） | small / CPU / int8 实测英文真人语音、中文合成语音及15秒中文真人教程口播，区间时间和文字稿复用通过；静音音轨返回 no_speech，无音轨返回 no_audio，仍交付其他材料。中文有错字；真人样本仅核对语言与主题，未做准确率评估 |
 
 通用路径支持公开媒体直链、单个 HTML video/source 和基础非加密 VOD HLS（含 TS、fMP4 初始化段和 master 变体）。多视频网页、JS 动态播放器、HLS 独立音轨组 / 字节范围 / discontinuity / 加密 / 直播、MPD、跨调用断点续传仍未支持；返回具体诊断。腾讯只接单视频 `/x/page/VID.html` 或 `/x/cover/CID/VID.html`，不遍历整剧集，不补齐试看，不处理 DRM。以上是少量样本验证，不能推断平台所有链接均可用。
 
@@ -155,4 +160,4 @@ export AGENT_VIDEO_ASR_MODEL="$HOME/.cache/agent-video/models/faster-whisper-sma
 
 ## 参考
 
-设计参考 [yt-dlp](https://github.com/yt-dlp/yt-dlp)、[claude-video](https://github.com/bradautomates/claude-video)、[claude-real-video](https://github.com/HUANGCHIHHUNGLeo/claude-real-video)、[BBDownT](https://github.com/LOVAHE/BBDownT) 和 [F2](https://github.com/Johnserf-Seed/f2) 的职责拆分与材料获取思路。这些不是运行依赖。源码移植或改编涉及的许可与署名随相应文件保留。
+设计参考 [yt-dlp](https://github.com/yt-dlp/yt-dlp)、[claude-video](https://github.com/bradautomates/claude-video)、[claude-real-video](https://github.com/HUANGCHIHHUNGLeo/claude-real-video)、[BBDownT](https://github.com/LOVAHE/BBDownT) 和 [F2](https://github.com/Johnserf-Seed/f2) 的职责拆分与材料获取思路；[Video-Browser](https://github.com/chrisx599/Video-Browser) 的候选筛选与渐进阅读仅参考思路，未移植代码。以上不是运行依赖。源码移植或改编涉及的许可与署名随相应文件保留。
