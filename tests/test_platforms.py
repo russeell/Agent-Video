@@ -1,4 +1,5 @@
 import http.server
+import io
 import json
 import re
 from pathlib import Path
@@ -7,7 +8,7 @@ import tempfile
 import threading
 from functools import partial
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import platforms
@@ -85,6 +86,72 @@ class PlatformsTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join()
+
+    def test_http_download_retries_whole_response_at_most_three_times(self):
+        calls = {}
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                calls[self.path] = calls.get(self.path, 0) + 1
+                status = {'/down': 503, '/denied': 403, '/missing': 404}.get(self.path, 200)
+                self.send_response(status)
+                self.send_header('Content-Length', '4')
+                self.end_headers()
+                if self.path == '/permanent' or (self.path == '/short' and calls[self.path] == 1):
+                    self.wfile.write(b'ab')
+                elif self.path != '/empty' or calls[self.path] > 1:
+                    self.wfile.write(b'abcd')
+                self.close_connection = True
+            def log_message(self, *args):
+                pass
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as directory, patch.object(platforms.time, 'sleep'):
+                directory = Path(directory)
+                root = f'http://127.0.0.1:{server.server_port}'
+                for route in ('/short', '/empty'):
+                    path = platforms.download_file(root + route, directory / route[1:])
+                    self.assertEqual(path.read_bytes(), b'abcd')
+                    self.assertEqual(calls[route], 2)
+                for route, code, count in [('/permanent', 'download_incomplete', 3),
+                                           ('/down', 'network_failed', 3),
+                                           ('/denied', 'access_denied', 1),
+                                           ('/missing', 'network_failed', 1)]:
+                    with self.subTest(route=route), self.assertRaises(platforms.Failure) as caught:
+                        platforms.download_file(root + route, directory / route[1:])
+                    self.assertEqual(caught.exception.code, code)
+                    self.assertEqual(calls[route], count)
+                    self.assertFalse((directory / route[1:]).exists())
+                self.assertFalse(list(directory.glob('.*.part')))
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def test_http_download_read_failure_restarts_and_disk_failure_does_not_retry(self):
+        class Response(io.BytesIO):
+            headers = {'Content-Length': '4'}
+        broken = Response(b'ab')
+        broken.read = MagicMock(side_effect=[b'ab', ConnectionResetError('connection reset')])
+        with tempfile.TemporaryDirectory() as directory, patch.object(platforms.time, 'sleep'):
+            path = Path(directory) / 'media'
+            with patch.object(platforms, 'request', side_effect=[broken, Response(b'abcd')]) as request:
+                self.assertEqual(platforms.download_file('https://example.test/media', path), path)
+                self.assertEqual(path.read_bytes(), b'abcd')
+                self.assertEqual(request.call_count, 2)
+                self.assertTrue(all(call.kwargs['attempts'] == 1 for call in request.call_args_list))
+            handle = MagicMock()
+            handle.__enter__.return_value = handle
+            handle.write.side_effect = OSError('disk full')
+            with patch.object(platforms, 'request', return_value=Response(b'abcd')) as request, \
+                    patch.object(Path, 'open', return_value=handle):
+                with self.assertRaises(platforms.Failure) as caught:
+                    platforms.download_file('https://example.test/media', path)
+                self.assertEqual(caught.exception.code, 'download_failed')
+                self.assertEqual(request.call_count, 1)
+            self.assertEqual(path.read_bytes(), b'abcd')
+            self.assertFalse(list(Path(directory).glob('.*.part')))
 
     def test_generic_real_http_media_and_vod_hls(self):
         observed = []

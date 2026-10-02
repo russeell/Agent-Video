@@ -50,22 +50,26 @@ def _opener(cookies=None):
                                       urllib.request.HTTPSHandler(context=context))
 
 
-def request(url, *, headers=None, cookies=None):
-    """Open a validated HTTP response. Network retries are centralized here."""
+def request(url, *, headers=None, cookies=None, attempts=3):
+    """Open HTTP, optionally letting a full-body download own its retries."""
     if urllib.parse.urlsplit(url).scheme not in ('http', 'https'):
         raise Failure('invalid_url', 'Only HTTP(S) resource addresses are supported.')
     supplied = {k: v for k, v in (headers or {}).items()
                 if k.lower() not in ('cookie', 'authorization', 'proxy-authorization')}
-    for attempt in range(3):
+    for attempt in range(attempts):
         try:
             return _opener(cookies).open(urllib.request.Request(url, headers={'User-Agent': UA, **supplied}), timeout=30)
         except urllib.error.HTTPError as exc:
+            exc.close()
             if exc.code in (401, 403):
                 raise Failure('access_denied', f'HTTP {exc.code}: platform access was denied.', 'Try an explicitly supplied Cookie file or retry later.') from None
-            if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
-                raise Failure('network_failed', f'HTTP request failed with status {exc.code}.', 'Retry acquisition later.') from None
-        except (urllib.error.URLError, TimeoutError, OSError):
-            if attempt == 2:
+            retryable = exc.code in (429, 500, 502, 503, 504)
+            if not retryable or attempt == attempts - 1:
+                failure = Failure('network_failed', f'HTTP request failed with status {exc.code}.', 'Retry acquisition later.')
+                failure.retryable = retryable
+                raise failure from None
+        except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException):
+            if attempt == attempts - 1:
                 raise Failure('network_failed', 'HTTP request failed (network or TLS).', 'Check connectivity and system trust, then retry.') from None
         time.sleep(.25 * (attempt + 1))
 
@@ -95,16 +99,29 @@ def download_file(url, path, *, headers=None, cookies=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name('.' + path.name + '.' + uuid.uuid4().hex + '.part')
     try:
-        with request(url, headers=headers, cookies=cookies) as response, tmp.open('xb') as handle:
-            count = 0
-            while chunk := response.read(1024 * 1024):
-                handle.write(chunk)
-                count += len(chunk)
-            size = response.headers.get('Content-Length')
-            if not count or (size and count != int(size)):
-                raise Failure('download_incomplete', 'The resource download was empty or incomplete.', 'Retry acquisition.')
-        tmp.replace(path)
-        return path
+        for attempt in range(3):
+            try:
+                with request(url, headers=headers, cookies=cookies, attempts=1) as response, tmp.open('wb') as handle:
+                    count = 0
+                    while True:
+                        try:
+                            chunk = response.read(1024 * 1024)
+                        except (OSError, http.client.HTTPException):
+                            raise Failure('network_failed', 'HTTP response could not be completely read.', 'Retry acquisition later.') from None
+                        if not chunk:
+                            break
+                        handle.write(chunk)
+                        count += len(chunk)
+                    size = response.headers.get('Content-Length')
+                    if not count or (size and count != int(size)):
+                        raise Failure('download_incomplete', 'The resource download was empty or incomplete.', 'Retry acquisition.')
+                tmp.replace(path)
+                return path
+            except Failure as exc:
+                if (exc.code not in ('network_failed', 'download_incomplete')
+                        or not getattr(exc, 'retryable', True) or attempt == 2):
+                    raise
+                time.sleep(.25 * (attempt + 1))
     except (OSError, ValueError, http.client.HTTPException):
         raise Failure('download_failed', 'The resource could not be completely written.', 'Check disk space and retry.') from None
     finally:
