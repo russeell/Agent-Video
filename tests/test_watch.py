@@ -241,6 +241,60 @@ class WatchTests(unittest.TestCase):
             self.assertTrue(media.probe(repaired_path)['audio'])
             self.assertEqual(fetch.call_count, 3)
 
+    def test_bilibili_old_source_quality_upgrades_video_frames_and_metadata_once(self):
+        from scripts import platforms
+        samples = {}
+        for name, size in [('low', '852:480'), ('high', '1920:1080')]:
+            samples[name] = self.root / (name + '.mp4')
+            subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', self.video,
+                            '-vf', 'scale=' + size, '-c:v', 'mpeg4', '-c:a', 'copy', samples[name]], check=True)
+        source = {'platform': 'bilibili', 'id': 'BVdemo', 'url': 'https://www.bilibili.com/video/BVdemo', 'part': 1}
+        low = {'url': 'low', 'width': 852, 'height': 480, 'has_video': True, 'has_audio': True}
+        high = {**low, 'url': 'high', 'width': 1920, 'height': 1080}
+        def resolved(candidate):
+            return {'source': source, 'metadata': {'duration': 2,
+                    'quality_info': {'available_sizes': [[candidate['width'], candidate['height']]]}},
+                    'subtitles': [], 'diagnostics': [], 'formats': [candidate]}
+        def download(data, directory, **kwargs):
+            directory.mkdir(parents=True, exist_ok=True)
+            name = data['formats'][0]['url']
+            dest = directory / (name + '.mp4')
+            shutil.copy2(samples[name], dest)
+            return dest
+        with patch.object(platforms, 'resolve', side_effect=[resolved(low), resolved(high)]) as resolve, \
+                patch.object(platforms, 'download', side_effect=download) as fetch:
+            request = ('--get', 'video,frames', '--at', '0.2', '--width', '0')
+            code, first = self.call(source['url'], '--out', str(self.root / 'out'), *request)
+            self.assertEqual(code, 0, first)
+            evidence = first['manifest']
+            old_frame = next(a['path'] for a in first['artifacts'] if a['type'] == 'frames')
+            old_video = next(a['path'] for a in first['artifacts'] if a['type'] == 'video')
+            data = json.loads(Path(evidence).read_text())
+            info_id = next(a['id'] for a in data['artifacts'] if a['type'] == 'info')
+            for artifact in data['artifacts']:
+                artifact.pop('quality_revision', None)
+            Path(evidence).write_text(json.dumps(data))
+            code, upgraded = self.call('--evidence', evidence, *request)
+            self.assertEqual(code, 0, upgraded)
+            new_video = next(a['path'] for a in upgraded['artifacts'] if a['type'] == 'video')
+            new_frame = next(a['path'] for a in upgraded['artifacts'] if a['type'] == 'frames')
+            self.assertEqual(media.probe(new_video)['video']['width'], 1920)
+            self.assertEqual(media.probe(new_frame)['video']['width'], 1920)
+            self.assertTrue(media.probe(new_video)['audio'])
+            self.assertTrue(Path(old_video).exists())
+            self.assertTrue(Path(old_frame).exists())
+            self.assertNotEqual(new_frame, old_frame)
+            info = next(a for a in upgraded['artifacts'] if a['type'] == 'info')
+            data = json.loads(Path(evidence).read_text())
+            self.assertEqual(next(a['id'] for a in data['artifacts'] if a['type'] == 'info'), info_id)
+            self.assertEqual(json.loads(Path(info['path']).read_text())['quality_info']['available_sizes'], [[1920, 1080]])
+            code, repeated = self.call('--evidence', evidence, *request)
+            self.assertEqual(code, 0, repeated)
+            self.assertEqual(next(a['path'] for a in repeated['artifacts'] if a['type'] == 'video'), new_video)
+            self.assertEqual(next(a['path'] for a in repeated['artifacts'] if a['type'] == 'frames'), new_frame)
+            self.assertEqual(fetch.call_count, 2)
+            self.assertEqual(resolve.call_count, 2)
+
     def test_source_quality_does_not_promote_same_size_lower_bitrate_video(self):
         from scripts import platforms
         source = {'platform': 'bilibili', 'id': 'BVdemo', 'url': 'https://www.bilibili.com/video/BVdemo', 'part': 1}

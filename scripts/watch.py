@@ -191,6 +191,8 @@ class Watch:
         media.atomic_json(self.path, self.data)
 
     def add(self, kind, path, **fields):
+        if kind in ('video', 'frames') and self.data['source'].get('platform') == 'bilibili':
+            fields['quality_revision'] = 1
         artifact = manifest.add(self.data, self.directory, kind, path, **fields)
         self.save()
         return artifact
@@ -220,6 +222,11 @@ class Watch:
             self.resolved = refreshed
             self.media_resolved = bool(set(needs) & {'video', 'audio', 'frames', 'media'})
             self.data['source'] = self.resolved['source']
+            existing_info = next((a for a in self.data['artifacts'] if a['type'] == 'info'), None)
+            if existing_info:
+                from datetime import datetime, timezone
+                metadata = {**self.resolved['metadata'], 'collected_at': datetime.now(timezone.utc).isoformat()}
+                media.atomic_json(manifest.artifact_path(self.directory, existing_info), metadata)
             for item in self.resolved.get('diagnostics', []):
                 if item not in self.diagnostics:
                     self.diagnostics.append(item)
@@ -272,6 +279,7 @@ class Watch:
             if kind == 'transcript' and self.args.language and a.get('language') != self.args.language:
                 continue
             if kind == 'video' and (a.get('frames_only') or
+                not self.current_quality(a) or
                 (self.access_context is not None and a.get('access_context') != self.access_context) or
                 (self.args.quality != 'auto' and a.get('quality') not in (self.args.quality, 'source') and not a.get('external'))):
                 continue
@@ -282,6 +290,13 @@ class Watch:
             return a
         return None
 
+    def current_quality(self, artifact):
+        # Earlier Bilibili extraction could miss HD and mark 480p as the best source.
+        # Recheck those files once after enabling full anonymous playurl formats.
+        needs_best = self.args.quality == 'source' or ('frames' in self.args.kinds and self.args.width == 0)
+        return (not needs_best or self.data['source'].get('platform') != 'bilibili'
+                or artifact.get('quality_revision', 0) >= 1)
+
     def acquire(self, purpose):
         if self.local:
             return self.local, self.info or media.probe(self.local)
@@ -291,6 +306,8 @@ class Watch:
                 if a['type'] != kind or not manifest.covers(a, 0, full_end):
                     continue
                 if purpose == 'video' and a.get('frames_only'):
+                    continue
+                if purpose != 'audio' and not self.current_quality(a):
                     continue
                 if purpose != 'audio' and self.access_context is not None and a.get('access_context') != self.access_context:
                     continue
@@ -450,6 +467,7 @@ class Watch:
         missing = []
         for time in times:
             existing = next((a for a in self.data['artifacts'] if a['type'] == 'frames' and
+                             self.current_quality(a) and
                              abs(a.get('requested_time', -1) - time) < 0.000001 and
                              (self.access_context is None or a.get('access_context') == self.access_context) and
                              (self.args.quality == 'auto' and self.args.width > 0 or
@@ -533,6 +551,7 @@ class Watch:
         if ('frames' in wanted and self.args.times is not None and self.access_context is None
                 and (self.args.quality == 'auto' or self.args.width == 0)):
             cached_frames = [next((a for a in self.data['artifacts'] if a['type'] == 'frames'
+                and self.current_quality(a)
                 and abs(a.get('requested_time', -1) - time) < 0.000001
                 and (a.get('width', 0) >= self.args.width if self.args.width else
                      a.get('quality') == 'source' and a.get('width') == a.get('source_width'))), None)

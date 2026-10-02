@@ -24,6 +24,37 @@ def _api(path, query, cookies):
     return data['data']
 
 
+def _full_playinfo(play, duration):
+    if play.get('is_preview'):
+        raise Failure('auth_required', 'Bilibili only returned a preview, not the full work.', 'Provide your own authorized Cookie file.')
+    # A full-work duration in metadata does not make a preview a complete file.
+    # Also reject a shorter declared playback duration before downloading;
+    # shared download() verifies the actual media duration afterwards.
+    lengths = [play.get('timelength')]
+    dash_duration = (play.get('dash') or {}).get('duration')
+    if isinstance(dash_duration, (int, float)):
+        lengths.append(dash_duration * 1000)
+    if duration and any(isinstance(value, (int, float)) and
+                        value / 1000 < duration - max(2, duration * .03) for value in lengths):
+        raise Failure('media_unavailable', 'Bilibili returned a shortened playback resource, not the full work.',
+                      'Use an authorized full-work source.')
+    return play
+
+
+def _playinfo(bvid, cid, duration, cookies):
+    query = {'bvid': bvid, 'cid': cid, 'fnval': 4048, 'fnver': 0, 'qn': 120, 'fourk': 1}
+    if not cookies:
+        # Public web playback can expose additional DASH qualities with this
+        # standard anonymous parameter. Never accept a preview as a full work.
+        try:
+            play = _full_playinfo(_api('/x/player/playurl', {**query, 'try_look': 1}, cookies), duration)
+            if (play.get('dash') or {}).get('video') or play.get('durl'):
+                return play
+        except Failure:
+            pass
+    return _full_playinfo(_api('/x/player/playurl', query, cookies), duration)
+
+
 def resolve(url, *, part=None, cookies=None, need=None):
     if urlsplit(url).hostname == 'b23.tv':
         with request(url, cookies=cookies) as response:
@@ -80,9 +111,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
             result['diagnostics'].append(diagnostic('transcript', Failure('subtitle_failed', str(exc), exc.next_action)))
     if needs.intersection(('video', 'audio', 'frames', 'media')):
         try:
-            play = _api('/x/player/playurl', {'bvid': bvid, 'cid': cid, 'fnval': 4048, 'qn': 120, 'fourk': 1}, cookies)
-            if play.get('is_preview'):
-                raise Failure('auth_required', 'Bilibili only returned a preview, not the full work.', 'Provide your own authorized Cookie file.')
+            play = _playinfo(bvid, cid, page.get('duration'), cookies)
             dash = play.get('dash') or {}
             for kind in ('video', 'audio'):
                 for stream in dash.get(kind) or []:
