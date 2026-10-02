@@ -39,7 +39,7 @@ Agent Video 为 Agent 提供所需的**文字稿、截图、音频、视频文�
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-需要 **Python 3.11+** 和 **FFmpeg**。[指南](INSTALL.md) 包含安装、Windows、更新和可选语音转文字的步骤。更新时，让 Agent 按同一份指南操作即可。
+需要 **Python 3.11+** 和 **FFmpeg**；抖音还需要 **Chrome 或 Chromium**。[指南](INSTALL.md) 包含安装、Windows、更新和可选语音转文字的步骤。更新时，让 Agent 按同一份指南操作即可。
 
 安装后，给 Agent 一个链接或本地文件，让它使用 Agent Video。
 
@@ -53,7 +53,7 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 | **YouTube** | 读取字幕，下载公开视频和 Shorts；已验证 1080p 下载 |
 | **Bilibili** | 读取可用字幕，下载公开视频，也可以指定分 P；已验证 1080p 下载 |
 | **TikTok** | 实验支持：已用两个公开视频验证文字稿、下载和截图 |
-| **抖音** | 暂不可用：当前请求被平台的签名验证拦住 |
+| **抖音** | 实验支持：已验证一个公开视频的信息、1080p 有声下载和截图；需要 Chrome 或 Chromium |
 
 暂不支持其他网站、媒体直链、直播和 DRM 加密视频。已经下载的视频可以作为本地文件使用。
 

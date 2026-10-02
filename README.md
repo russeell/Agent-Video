@@ -39,7 +39,7 @@ Install Agent Video by following this guide:
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-Requires **Python 3.11+** and **FFmpeg**. The [guide](INSTALL.md) covers installation, Windows, updates and optional speech-to-text. To update, ask your agent to follow the same guide.
+Requires **Python 3.11+** and **FFmpeg**; Douyin also needs **Chrome or Chromium**. The [guide](INSTALL.md) covers installation, Windows, updates and optional speech-to-text. To update, ask your agent to follow the same guide.
 
 After installation, ask your agent to use Agent Video with a link or local file.
 
@@ -53,7 +53,7 @@ After installation, ask your agent to use Agent Video with a link or local file.
 | **YouTube** | Read captions and download public videos and Shorts; 1080p downloads tested |
 | **Bilibili** | Read available captions and download public videos, including a chosen part; 1080p downloads tested |
 | **TikTok** | Experimental: transcripts, downloads and screenshots tested on two public videos |
-| **Douyin** | Not working yet: the current request is blocked by a signature check |
+| **Douyin** | Experimental: information, 1080p downloads with audio and screenshots tested on one public video; needs Chrome or Chromium |
 
 Other websites, direct media links, live streams and DRM-protected videos are not supported. You can use a downloaded file as local input.
 

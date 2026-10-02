@@ -66,6 +66,12 @@ New-Item -ItemType Junction -Path "$env:USERPROFILE\.agents\skills\agent-video" 
 
 Use `.claude` instead of `.agents` for Claude Code. Check existing links first. For updates, use the same Git commands and `.\.venv\Scripts\python.exe -m pip install -e .`; a uv-managed environment uses `uv pip install --python .venv\Scripts\python.exe -e .`.
 
+## Douyin
+
+Install **Google Chrome or Chromium** to read Douyin videos. Agent Video starts the installed browser headlessly in a temporary, empty profile to obtain the work's data; it does not read your existing browser profile or cookies. Downloads and media processing use Agent Video's own code.
+
+Chrome is detected in its normal macOS / Windows location, or `google-chrome`, `chromium` or `chromium-browser` on `PATH`. Interactive verification or login pages may still prevent access; these are not automated.
+
 ## Optional speech-to-text
 
 Install the optional dependencies:

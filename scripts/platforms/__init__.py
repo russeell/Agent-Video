@@ -264,7 +264,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if host.endswith('.tiktok.com') or host == 'tiktok.com':
         from . import tiktok
         return tiktok.resolve(url, part=part, cookies=cookies, need=need)
-    if host.endswith('.douyin.com') or host == 'douyin.com':
+    if host.endswith('.douyin.com') or host in ('douyin.com', 'iesdouyin.com', 'www.iesdouyin.com'):
         from . import douyin
         return douyin.resolve(url, part=part, cookies=cookies, need=need)
     raise Failure('unsupported_source', 'This website is not supported by Agent Video.',

@@ -10,7 +10,8 @@ class RoutingTest(unittest.TestCase):
         routes = [(bilibili, 'https://www.bilibili.com/video/BVexample', 2),
                   (youtube, 'https://www.youtube.com/shorts/abcdefghijk', None),
                   (tiktok, 'https://vm.tiktok.com/short/', None),
-                  (douyin, 'https://v.douyin.com/short/', None)]
+                  (douyin, 'https://v.douyin.com/short/', None),
+                  (douyin, 'https://www.iesdouyin.com/share/video/123/', None)]
         with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('Routing must not access HTTP')) as network:
             for adapter, source, part in routes:
                 expected = {'source': {'url': source}}
