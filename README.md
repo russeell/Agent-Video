@@ -2,6 +2,8 @@
 
 **Let your agent watch videos.**
 
+源码与更新：[GitHub 仓库](https://github.com/russeell/agent-video)。
+
 给 Agent 一个视频链接、本地文件或视频需求，让它按问题获取文字、画面、音频、视频和信息。寻找视频时，宿主先搜索候选，Agent Video 再按需提供内容证据。所有材料保存在同一个结果目录，方便继续追问和直接交付文件。
 
 平台解析与下载由本项目实现，不需要安装 yt-dlp、F2 或 BBDownT。FFmpeg / ffprobe 用于底层媒体处理；本地语音转录可选。

@@ -11,6 +11,9 @@ license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = ["truststore>=0.10", "cryptography>=42.0"]
 
+[project.urls]
+Repository = "https://github.com/russeell/agent-video"
+
 [project.optional-dependencies]
 # faster-whisper 1.2.1 still passes metadata_errors, removed by PyAV 19.
 asr = ["faster-whisper>=1.2,<2", "av<19"]
