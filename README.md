@@ -1,86 +1,108 @@
-# Agent Video
+<h1 align="center">Agent Video</h1>
+<p align="center"><strong>Let your agent watch videos.</strong></p>
 
-**Let your agent watch videos.**
+<p align="center">
+  <a href="https://github.com/russeell/Agent-Video/actions/workflows/test.yml"><img src="https://github.com/russeell/Agent-Video/actions/workflows/test.yml/badge.svg?branch=main" alt="Tests"></a>
+  <a href="INSTALL.md"><img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License"></a>
+</p>
 
-**English** | [简体中文](README.zh-CN.md)
+<p align="center">
+  English · <a href="README.zh-CN.md">简体中文</a> · <a href="INSTALL.md">Install & update</a> · <a href="SKILL.md">Agent Skill</a>
+</p>
 
-Give your coding agent a video link, a local file, or a topic. Agent Video fetches transcripts, frames, audio, video files, and metadata as needed. Your agent reads the results, answers questions, and reuses the same files for follow-ups.
+Give your coding agent a video link or local file. Agent Video gets the **transcript, frames, audio, video and metadata** it needs to answer your question. Your agent reads the evidence, explains what it finds, and keeps the materials for follow-ups.
 
-Works with Codex, Claude Code, and other hosts that support Agent Skills. Platform extraction is implemented here; no external video downloader is required.
+Works with **Codex, Claude Code**, and other hosts that support Agent Skills.
 
-## Quick start
-
-Requires **Python 3.11+** and **FFmpeg / ffprobe**. Ask your agent:
-
-> Read [INSTALL.md](INSTALL.md) and install Agent Video for my host.
-
-[INSTALL.md](INSTALL.md) covers installation, Skill registration, updates, Windows and optional speech-to-text. Keep the project in place after installation.
-
-## Use it
+## One video. Keep asking.
 
 Ask your agent naturally:
 
-- “What is this video about? `<url>`”
-- “What happens at 02:10? Show me a clear frame.”
-- “Extract the timestamped transcript.”
-- “Download the best available quality, then save the audio.”
-- “Find a Chinese FFmpeg tutorial under 10 minutes with a hands-on demo.”
-
-For discovery, the host uses its available search tools; Agent Video reads candidates when content verification is needed. Search uses your chosen platform, then the current task's platform, otherwise YouTube. It expands across platforms only when requested.
-
-Skill selection depends on the host. If needed, explicitly ask to use Agent Video, select `$agent-video` in Codex, or invoke `/agent-video` in Claude Code.
-
-<details>
-<summary>Direct CLI usage</summary>
-
-```bash
-# Captions first; local speech-to-text if configured
-.venv/bin/agent-video "<video-url-or-local-file>" --get transcript
-
-# Get a clear frame or download media
-.venv/bin/agent-video "<video-url>" --get frames --at 02:10 --width 0 --quality source
-.venv/bin/agent-video "<video-url>" --get video,audio
-
-# Continue with the manifest returned by an earlier call
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
+```text
+Summarize this tutorial: <video-url>
+Show me the code on screen at 02:10.
+Save the video in the best available quality.
 ```
 
-`--get` accepts `info,transcript,frames,audio,video`; the default is `transcript`. See `--help` for language, intervals, quality, parts, and Cookie files. Cookies are used only when you explicitly supply a file; browser credentials are never read automatically.
+Each question builds on the same materials. A transcript can answer what was said; a clear frame can show what happened. When you ask for the file, existing media is reused or upgraded as needed.
 
-Results live in `.agent-video/` by default. JSON output contains material paths, a manifest for follow-ups, and diagnostics. Partial success still returns usable files. Exit codes: `0` complete, `2` partial, `1` failed, `64` invalid arguments.
+- **Get just what you need.** Captions first, optional local speech-to-text, selected frames for visual questions, and media files on request.
+- **Keep the original timeline.** Transcripts and frames refer to times in the source video, including when you read an interval.
+- **Read it, then keep it.** Evidence stays in a local folder with a manifest for reuse. The same files can support an answer or be delivered to you.
 
-</details>
+Platform extraction is implemented in this project. The runtime uses Python and FFmpeg; speech-to-text adds an optional local model. Your host agent handles understanding and answers.
 
-Captions are preferred; speech-to-text needs the optional setup below. Visual questions use selected frames, including silent recordings. Frame text is distinct from spoken transcripts; there is no built-in OCR. Sampling does not imply a full-video review.
+## Get started
 
-Video downloads select the highest available quality. Timestamps refer to the original video; existing materials are reused and local input files stay unchanged.
+Copy this into your coding agent:
+
+```text
+Install Agent Video for my coding agent by following this guide:
+https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
+```
+
+Requires **Python 3.11+** and **FFmpeg / ffprobe**. The [installation guide](INSTALL.md) covers setup, Skill registration, Windows, updates and optional speech-to-text. Already installed? Ask your agent to update Agent Video using the same guide.
+
+Skill discovery is handled by your host. If needed, explicitly request Agent Video or select its Skill.
+
+## More things to try
+
+| Ask your agent | What it uses |
+|---|---|
+| “Extract a timestamped transcript.” | Available captions, or configured local ASR |
+| “Read the UI, code or chart in this recording.” | Selected frames that the agent opens and inspects |
+| “Save the audio from 01:20 to 01:35.” | The video's actual audio track, clipped to that interval |
+| “Who made this video, and how long is it?” | Metadata such as author, title and duration |
+| “Find a Chinese FFmpeg tutorial under 10 minutes with a hands-on demo.” | Host search tools, then evidence to verify the candidates |
+
+Video discovery uses the host's available search tools. Search follows your chosen platform, then the current video task's platform, otherwise YouTube. It expands across platforms when you request it. Titles and search snippets support screening; content claims require reading the video evidence.
 
 ## Supported sources
 
-Early MVP: these results come from a small set of real samples, not a guarantee for every video.
+**v0.1 is an early MVP.** The scope below reflects real public samples; access varies by video, region and platform changes.
 
-| Source | Verified scope |
+| Source | Current scope |
 |---|---|
-| Local files | Subtitles, frames, audio/video export, intervals, and reuse |
-| YouTube | Public videos and Shorts: captions, 1080p video with audio, frames, and reuse |
-| Bilibili | Public videos and individual parts: 1080p downloads, available captions, audio/ASR, and reuse |
-| TikTok | Two public samples: captions or local ASR, complete video/audio, frames, and reuse |
-| Douyin | Experimental and currently blocked by a signature challenge; content and downloads are not verified |
-| Tencent Video | Experimental; one public, non-DRM sample downloaded and inspected |
+| **Local files** | Subtitles, frames, audio/video export, intervals and reuse |
+| **YouTube** | Public videos and Shorts: captions, video with audio, frames and reuse; 1080p verified |
+| **Bilibili** | Public videos and individual parts: available captions, video/audio, local ASR and reuse; 1080p verified |
+| **TikTok** · experimental | Captions or local ASR, complete video/audio, frames and reuse verified on two public samples |
+| **Tencent Video** · experimental | One public, non-DRM sample downloaded and inspected |
+| **Douyin** · experimental | Current anonymous path encounters a signature challenge; content and downloads remain unverified |
 
-Access can vary by video, region, and platform changes. Other YouTube signature/token/login paths remain unsupported. Unknown websites, ordinary webpages, and direct media URLs are unsupported; downloaded files can be used locally. No live streams or DRM.
+Other YouTube signature, token and login paths remain unsupported. Unknown websites, ordinary webpages and direct media URLs are unsupported; downloaded files can be read locally. Live streams and DRM are outside the current scope.
 
-## Optional speech-to-text
+Captions and ASR may contain errors or cover only part of a video. Frames are samples; reading them does not imply a complete review. Screen text and spoken transcripts are kept distinct. Cookies are used only from a file you explicitly supply; browser credentials are never read automatically.
 
-Prepare the optional dependencies and a local model using [INSTALL.md](INSTALL.md#optional-speech-to-text). Captions work without ASR; other evidence remains available when speech-to-text is not configured.
+## CLI
 
-## Development
+After installation, run from the project directory:
+
+```bash
+# Read speech
+.venv/bin/agent-video "<video-url-or-local-file>" --get transcript
+
+# Continue with the returned manifest; inspect a moment at source resolution
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 02:10 --width 0 --quality source
+
+# Save the same video using the returned manifest
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
+```
+
+`--get` accepts `info,transcript,frames,audio,video` and supports combinations. Results are saved in `.agent-video/` by default. JSON output points to the files and manifest; partial success preserves usable evidence. Use `--help` for intervals, language, quality, parts and explicit Cookie files. Windows uses `.venv\Scripts\agent-video.exe`.
+
+## Contributing
+
+Broken public video links, clearer diagnostics and simpler agent workflows are useful contributions. [Open an issue](https://github.com/russeell/Agent-Video/issues) with the source platform, requested material and diagnostic message; keep credentials and signed media URLs out of reports.
+
+Install the project, make your change, then run the offline regression suite with FFmpeg available:
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Regression tests use temporary media and local HTTP servers. Online samples and real ASR are verified separately. The product is distributed as a source folder containing the Skill; a wheel alone is not a registered Skill.
+Online acquisition and real ASR are checked separately. Improvements should preserve evidence reuse and keep the tool small.
 
 ## License & credits
 

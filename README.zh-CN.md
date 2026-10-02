@@ -1,86 +1,108 @@
-# Agent Video
+<h1 align="center">Agent Video</h1>
+<p align="center"><strong>Let your agent watch videos.</strong></p>
 
-**Let your agent watch videos.**
+<p align="center">
+  <a href="https://github.com/russeell/Agent-Video/actions/workflows/test.yml"><img src="https://github.com/russeell/Agent-Video/actions/workflows/test.yml/badge.svg?branch=main" alt="测试"></a>
+  <a href="INSTALL.md"><img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="MIT 许可证"></a>
+</p>
 
-[English](README.md) | **简体中文**
+<p align="center">
+  <a href="README.md">English</a> · 简体中文 · <a href="INSTALL.md">安装与更新</a> · <a href="SKILL.md">Agent Skill</a>
+</p>
 
-给 Coding Agent 一个视频链接、本地文件或主题。Agent Video 按需获取文字稿、画面、音频、视频文件和相关信息，Agent 阅读后回答问题或交付文件，后续追问直接复用已有材料。
+给 Coding Agent 一个视频链接或本地文件。Agent Video 按问题获取所需的**文字稿、画面、音频、视频和元数据**，Agent 阅读证据后回答，并保留材料供后续追问使用。
 
-适用于 Codex、Claude Code 等支持 Agent Skills 的宿主。平台解析与下载由本项目实现，无需安装其他视频下载项目。
+适用于 **Codex、Claude Code** 等支持 Agent Skills 的宿主。
 
-## 快速开始
-
-需要 **Python 3.11+** 和 **FFmpeg / ffprobe**。直接告诉 Agent：
-
-> 阅读 [INSTALL.md](INSTALL.md)，为我当前使用的宿主安装 Agent Video。
-
-[INSTALL.md](INSTALL.md) 包含安装、Skill 注册、更新、Windows 和可选语音转录步骤。安装后保留项目目录。
-
-## 使用
+## 一个视频，继续追问
 
 直接向 Agent 提问：
 
-- “这个视频讲了什么？`<链接>`”
-- “02:10 在说什么？把那里的画面截清楚。”
-- “提取带时间戳的文字稿。”
-- “下载最清晰版本，再保存音频。”
-- “找一个中文、10分钟以内、有实际演示的 FFmpeg 教程。”
-
-寻找视频时，宿主使用已有搜索工具，Agent Video 按需读取候选，验证内容。搜索优先用户指定平台，其次当前任务的平台，否则默认 YouTube；只有明确要求才扩大到其他平台。
-
-自动匹配由宿主决定。未触发时可明确说“使用 Agent Video”，在 Codex 中选择 `$agent-video`，或在 Claude Code 中调用 `/agent-video`。
-
-<details>
-<summary>直接调用 CLI</summary>
-
-```bash
-# 优先字幕；没有可用字幕时使用已配置的本地 ASR
-.venv/bin/agent-video "<视频链接或本地文件>" --get transcript
-
-# 获取清晰画面或下载素材
-.venv/bin/agent-video "<视频链接>" --get frames --at 02:10 --width 0 --quality source
-.venv/bin/agent-video "<视频链接>" --get video,audio
-
-# 使用前一次返回的 manifest 继续获取
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
+```text
+总结这个教程：<视频链接>
+把 02:10 屏幕上的代码截清楚，讲一下。
+保存这个视频，使用当前可获取的最高质量。
 ```
 
-`--get` 支持 `info,transcript,frames,audio,video`，默认 `transcript`。语言、区间、质量、分 P 和 Cookie 文件等参数见 `--help`。仅使用显式提供的 Cookie 文件，不自动读取浏览器凭据。
+每次提问都接着已有材料进行。文字稿用来理解讲话，清晰画面用来检查实际内容；需要文件时，已有媒体优先复用，质量不足再补取。
 
-默认结果保存在 `.agent-video/`。JSON 返回材料路径、追问用的 manifest 和诊断；部分失败时仍交付成功材料。退出码：`0` 完成，`2` 部分成功，`1` 失败，`64` 参数错误。
+- **按问题取材。** 优先字幕，可选本地语音转录；视觉问题按需抽帧，要文件时再获取素材。
+- **保留原视频时间。** 文字稿与画面都对应源视频时刻，读取区间后仍可准确追问。
+- **读完还能拿走。** 材料保存在本地目录，通过 manifest 复用，同一份文件既能支持回答，也能直接交付。
 
-</details>
+平台解析由本项目实现，运行依赖 Python 和 FFmpeg；语音转录另需可选本地模型。理解内容和组织回答由宿主 Agent 完成。
 
-文字稿优先使用字幕；语音转录需要下方的可选配置。视觉问题按需抽帧，也可读取无声录屏。画面文字与讲话文字稿分别表达，项目未内置 OCR，抽样读取不代表完整看过视频。
+## 开始使用
 
-视频默认下载当前可取得的最高质量。时间相对原视频，已有材料优先复用，用户原文件保持只读。
+把下面这段话复制给你的 Coding Agent：
+
+```text
+请按照以下指南，为我当前使用的宿主安装 Agent Video：
+https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
+```
+
+需要 **Python 3.11+** 和 **FFmpeg / ffprobe**。[安装指南](INSTALL.md) 包含环境准备、Skill 注册、Windows、更新和可选语音转录。已经安装过？让 Agent 按同一份指南更新即可。
+
+Skill 的发现与选择由宿主处理；需要时可明确要求“使用 Agent Video”或手动选择该 Skill。
+
+## 还可以这样问
+
+| 向 Agent 提问 | 使用的材料 |
+|---|---|
+| “提取带时间戳的文字稿。” | 可用字幕，或已配置的本地 ASR |
+| “看看这个录屏里的 UI、代码或图表。” | Agent 实际打开并阅读的抽样画面 |
+| “保存 01:20 到 01:35 的音频。” | 从视频实际音轨裁剪的对应片段 |
+| “作者是谁？视频多长？” | 作者、标题、时长等元数据 |
+| “找一个中文、10分钟以内、有实际演示的 FFmpeg 教程。” | 宿主搜索工具，以及验证候选内容的证据 |
+
+寻找视频使用宿主已有搜索工具，优先用户指定平台，其次当前视频任务的平台，否则默认 YouTube；用户明确要求时再跨平台。标题和搜索摘要用于初筛，关于实际内容的推荐理由需要读取视频证据。
 
 ## 来源支持
 
-当前为早期 MVP；以下是少量真实样本的验证范围，不保证平台所有视频均可获取。
+**v0.1 是早期 MVP。** 下表是公开样本的实际验证范围；获取受作品、地区和平台变化影响。
 
-| 来源 | 已验证范围 |
+| 来源 | 当前范围 |
 |---|---|
-| 本地文件 | 字幕、画面、音视频导出、区间处理和复用 |
-| YouTube | 公开视频与 Shorts：字幕、含音轨的1080p视频、画面和复用 |
-| Bilibili | 公开视频与指定分 P：1080p下载、可访问字幕、音频/ASR和复用 |
-| TikTok | 两个公开样本：字幕或本地ASR、完整音视频、画面和复用 |
-| 抖音 | 实验路径，当前受签名挑战阻塞；内容和下载尚未通过真实验收 |
-| 腾讯视频 | 实验路径，一个公开、非DRM样本下载与读取通过 |
+| **本地文件** | 字幕、画面、音视频导出、区间处理和复用 |
+| **YouTube** | 公开视频与 Shorts：字幕、含音轨的视频、画面和复用；已验证1080p |
+| **Bilibili** | 公开视频与指定分 P：可用字幕、音视频、本地 ASR 和复用；已验证1080p |
+| **TikTok** · 实验 | 两个公开样本验证了字幕或本地 ASR、完整音视频、画面和复用 |
+| **腾讯视频** · 实验 | 一个公开、非 DRM 样本下载与读取通过 |
+| **抖音** · 实验 | 当前匿名路径遇到签名挑战；内容和下载仍未通过真实验收 |
 
-获取受作品、地区和平台变化影响。YouTube 的其他签名、token、登录路径尚未实现。未知网站、普通网页和媒体直链不支持；已下载文件可作为本地输入。不处理直播或 DRM。
+YouTube 的其他签名、token 和登录路径尚未实现。未知网站、普通网页和媒体直链不支持；已下载文件可作为本地输入。当前不处理直播或 DRM。
 
-## 可选语音转录
+字幕和 ASR 可能有错字或没有覆盖全片；抽样画面不代表完整阅读。画面文字与讲话文字稿分别表达。Cookie 仅使用用户显式提供的文件，不自动读取浏览器凭据。
 
-可选依赖与本地模型准备见 [INSTALL.md](INSTALL.md#optional-speech-to-text)。已有字幕无需 ASR；未配置语音转录时仍可获取其他材料。
+## CLI
 
-## 开发
+安装后，在项目目录运行：
+
+```bash
+# 读取讲话文字
+.venv/bin/agent-video "<视频链接或本地文件>" --get transcript
+
+# 使用返回的 manifest 获取指定时刻的源尺寸画面
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 02:10 --width 0 --quality source
+
+# 使用返回的 manifest 保存同一视频
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
+```
+
+`--get` 支持 `info,transcript,frames,audio,video`，可组合请求。结果默认保存在 `.agent-video/`，JSON 返回文件路径和 manifest；部分失败仍保留成功证据。区间、语言、质量、分 P 和显式 Cookie 文件参数见 `--help`。Windows 使用 `.venv\Scripts\agent-video.exe`。
+
+## 参与贡献
+
+欢迎反馈失效的公开视频链接、改进诊断和简化 Agent 使用流程。[提交 Issue](https://github.com/russeell/Agent-Video/issues) 时附来源平台、需要的材料和诊断信息；不要包含凭据或带签名的媒体地址。
+
+安装项目并完成改动后，确保 FFmpeg 可用，运行离线回归：
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-默认回归使用临时媒体和本地 HTTP 服务；线上样本、真实 ASR 分别验证。产品以包含 Skill 的完整源码目录分发，仅安装 wheel 不会完成 Skill 注册。
+线上获取与真实 ASR 分别验证。改进应保留证据复用，让工具保持简洁。
 
 ## 许可与参考
 
