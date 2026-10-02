@@ -1,0 +1,24 @@
+.venv/
+.agent-video/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Local development material (not part of the distributed product)
+/SPEC.md
+/.dev/
+/AGENTS.md
+/CLAUDE.md
+/.claude/
+/.codex/
+/.pytest_cache/
+/.coverage
+/htmlcov/
+*.log
+.env
+.env.*
+!.env.example
+cookies*.txt
+*.cookies.txt

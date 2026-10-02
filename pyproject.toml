@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-video"
+version = "0.1.0"
+description = "Let your agent watch videos: acquire timestamped evidence from videos."
+requires-python = ">=3.11"
+dependencies = ["yt-dlp>=2026.8.19", "truststore>=0.10"]
+
+[project.optional-dependencies]
+asr = ["faster-whisper>=1.2,<2"]
+youtube = ["yt-dlp-ejs>=0.8", "curl-cffi>=0.13"]
+
+[tool.setuptools]
+packages = ["scripts", "scripts.platforms"]
