@@ -15,7 +15,7 @@ import secrets
 import time
 from urllib.parse import urlencode, urlsplit
 
-from . import Failure, UA, diagnostic, read_text
+from . import Failure, UA, diagnostic, read_text, media
 
 API = 'https://h5vv6.video.qq.com/getvinfo'
 HEADERS = {'User-Agent': UA, 'Referer': 'https://v.qq.com/'}
@@ -137,6 +137,7 @@ def _formats(data):
         candidates.append({'url': address, 'protocol': protocol, 'ext': ext,
                            'width': _number(video.get('vw')), 'height': _number(video.get('vh')),
                            'has_video': selected.get('video') != 0, 'has_audio': selected.get('audio') != 0,
+                           'fps': media.frame_rate(video.get('fps')),
                            'quality_id': selected.get('name'), 'bitrate': _number(selected.get('bandwidth')),
                            'headers': HEADERS})
     if not candidates:

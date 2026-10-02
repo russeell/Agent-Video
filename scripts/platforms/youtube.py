@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import json
 import re
 from urllib.parse import parse_qs, urlencode, urlsplit
-from . import Failure, diagnostic, read_text
+from . import Failure, diagnostic, read_text, media
 
 
 def _player(text):
@@ -70,7 +70,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
             extension = 'webm' if 'webm' in mime else ('mp4' if video else 'm4a')
             result['formats'].append({'url': fmt['url'], 'ext': extension, 'width': fmt.get('width'),
                                       'height': fmt.get('height'), 'has_video': video, 'has_audio': audio,
-                                      'bitrate': fmt.get('bitrate')})
+                                      'bitrate': fmt.get('bitrate'), 'fps': media.frame_rate(fmt.get('fps'))})
         if cipher_count or not result['formats']:
             result['diagnostics'].append(diagnostic('media', Failure('player_challenge_unsupported', 'YouTube requires unsupported player signature or client challenge processing for some or all streams.', 'Use a local media file; this public-page path is currently limited.')))
     result['metadata']['audio_expected'] = any(f['has_audio'] for f in result['formats']) if result['formats'] else None

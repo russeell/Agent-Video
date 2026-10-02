@@ -30,12 +30,23 @@ class PlatformsTest(unittest.TestCase):
         tracks = [{'url': str(w), 'width': w, 'height': h, 'has_video': True, 'has_audio': False}
                   for w, h in [(640, 360), (1280, 720), (1920, 1080), (3840, 2160)]]
         tracks += [{'url': 'audio', 'has_video': False, 'has_audio': True}]
-        self.assertEqual([f['url'] for f in platforms.select_formats(tracks)], ['1920', 'audio'])
+        self.assertEqual([f['url'] for f in platforms.select_formats(tracks)], ['3840', 'audio'])
+        self.assertEqual([f['url'] for f in platforms.select_formats(tracks, quality='1080p')], ['1920', 'audio'])
         self.assertEqual(platforms.select_formats(tracks, quality='source')[0]['width'], 3840)
         self.assertEqual(platforms.select_formats(tracks, want_video='frames', width=768)[0]['width'], 1280)
         self.assertEqual(platforms.select_formats(tracks, want_video=False)[0]['url'], 'audio')
         portrait = [{'url': 'p', 'width': 1080, 'height': 1920, 'has_video': True, 'has_audio': True}]
         self.assertEqual(platforms.select_formats(portrait)[0]['url'], 'p')
+
+    def test_video_resolution_then_fps_then_bitrate(self):
+        base = {'url': '30fps', 'width': 1920, 'height': 1080,
+                'has_video': True, 'has_audio': True, 'fps': 30, 'bitrate': 10000}
+        smooth = {**base, 'url': '60fps', 'fps': 60, 'bitrate': 5000}
+        sharp = {**base, 'url': '4k', 'width': 3840, 'height': 2160, 'fps': 24, 'bitrate': 1000}
+        self.assertEqual(platforms.select_formats([base, smooth])[0]['url'], '60fps')
+        self.assertEqual(platforms.select_formats([base, smooth, sharp])[0]['url'], '4k')
+        self.assertEqual(platforms.select_formats([base, smooth, sharp], quality='1080p')[0]['url'], '60fps')
+        self.assertEqual(platforms.select_formats([base, {**base, 'url': 'higher', 'bitrate': 20000}])[0]['url'], 'higher')
 
     def test_http_cookie_domain_and_atomic_download(self):
         observed = []
@@ -93,7 +104,7 @@ class PlatformsTest(unittest.TestCase):
                 platforms.media.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
                     '-i', directory / 'direct.mp4', '-c:v', 'mpeg2video' if name == 'vod' else 'copy', '-g', '10', '-c:a', 'copy', '-hls_time', '1', '-hls_list_size', '0',
                     *extra, directory / (name + '.m3u8')])
-            (directory / 'master.m3u8').write_text('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100000,RESOLUTION=160x90\nvod.m3u8\n')
+            (directory / 'master.m3u8').write_text('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100000,RESOLUTION=160x90,FRAME-RATE=60\nvod.m3u8\n')
             (directory / 'page.html').write_text('<title>Public clip</title><video><source src="direct.mp4"></video>')
             (directory / 'ambiguous.html').write_text('<video src="direct.mp4"></video><video src="direct.mp4"></video>')
             server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), partial(Handler, directory=str(directory)))
@@ -112,6 +123,8 @@ class PlatformsTest(unittest.TestCase):
                 for name in ('direct.mp4', 'page.html', 'vod.m3u8', 'fragmented.m3u8', 'master.m3u8'):
                     with self.subTest(name=name):
                         result = platforms.resolve(root + '/' + name, need=['video'])
+                        if name == 'master.m3u8':
+                            self.assertEqual(result['formats'][0]['fps'], 60)
                         output = platforms.download(result, directory / 'downloads')
                         actual = platforms.media.probe(output)
                         self.assertTrue(actual['video'])

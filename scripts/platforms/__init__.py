@@ -145,8 +145,11 @@ def select_formats(formats, *, want_video=True, quality='auto', width=768):
     if not videos:
         raise Failure('media_unavailable', 'No downloadable video stream is available.', 'Retry later or use a local media file.')
     def rank(f):
-        return ((f.get('width') or 0) * (f.get('height') or 0), f.get('bitrate') or 0)
-    if quality == 'source' or (want_video == 'frames' and width == 0):
+        # Bitrate is only a final tie-breaker; it is not a codec-independent
+        # measure of visual quality.
+        return ((f.get('width') or 0) * (f.get('height') or 0),
+                f.get('fps') or 0, f.get('bitrate') or 0)
+    if quality == 'source' or (quality == 'auto' and want_video != 'frames') or (want_video == 'frames' and width == 0):
         selected = max(videos, key=rank)
     elif want_video == 'frames' and quality == 'auto':
         suitable = [f for f in videos if (f.get('width') or 0) >= width]

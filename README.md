@@ -44,7 +44,7 @@ python3 -m venv .venv
 
 - 文字稿来自字幕或语音转录；简介、弹幕和抽样硬字幕不会冒充完整文字稿。录屏正文可由 Agent 读取画面并单独保存整理稿；项目未内置 OCR 引擎。
 - 帧和文字时间相对原视频，帧同时记录请求和实际时间。
-- `auto` 优先已有完整文件；新视频默认在 1080p 预算内选择。`--quality source` 要求最高可取得质量，不代表上传原始母版。需要读小字可用 `--width 0 --quality source`。
+- `--get video` 默认选择当前可取得的最高质量，与 `--quality source` 一致，不再默认限制1080p。显式 `--quality 1080p` 可限制下载档位；仅抽帧时 `auto` 仍按目标尺寸选择。最高可取得质量不代表上传原始母版。需要读小字可用 `--width 0 --quality source`。
 - 平台声明的1080p与当前可取得的480p分别记录；画面不足时提示实际尺寸，复用当前上限，不反复下载相同低清源。显式提供新的 Cookie 或更高质量要求时可重新检查。
 - B 站一次取一个分 P，默认 P1；可使用 URL 的 `p` 或 `--part`，继续 evidence 时仍是同一部分。
 - 用户原文件只读；结果目录由用户决定保留或删除，同一结果目录串行调用。
@@ -90,6 +90,8 @@ export AGENT_VIDEO_ASR_MODEL="/absolute/path/to/whisper-model"
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
+
+本轮35项测试通过；另以真实本地HTTP/HLS媒体验证1080p升级到4K、音轨完整和后续无联网复用。线上B站样本再次完成默认最高可用档下载。
 
 默认测试离线，使用临时合成媒体；需 FFmpeg / ffprobe 的测试在缺失时明确跳过。网络和真实 ASR 测试单独验证，不在每次测试中下载视频或大模型。
 

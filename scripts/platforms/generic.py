@@ -63,6 +63,7 @@ def _playlist(text, url):
                 raise Failure('parse_failed', 'HLS variant has an invalid bandwidth.')
             formats.append({'url': urljoin(url, lines[index + 1]), 'ext': 'm3u8', 'protocol': 'hls',
                             'width': width, 'height': height, 'bitrate': int(bandwidth),
+                            'fps': media.frame_rate(_value(attrs, 'FRAME-RATE')),
                             'has_video': True, 'has_audio': None})
         return formats, None
     if '#EXT-X-ENDLIST' not in lines:

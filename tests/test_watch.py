@@ -111,6 +111,7 @@ class WatchTests(unittest.TestCase):
             code, result = self.call('https://www.bilibili.com/video/BVdemo', '--out', str(self.root / 'out'), '--get', 'video,audio,frames', '--at', '0.2')
             self.assertEqual(code, 0, result)
             self.assertEqual(fetch.call_count, 1)
+            self.assertEqual(fetch.call_args.kwargs['quality'], 'source')
 
             code, result = self.call('--evidence', result['manifest'], '--get', 'video')
             self.assertEqual(code, 0)
@@ -174,6 +175,72 @@ class WatchTests(unittest.TestCase):
             delivered = next(a['path'] for a in result['artifacts'] if a['type'] == 'video')
             self.assertTrue(media.probe(delivered)['audio'])
 
+    def test_default_video_upgrades_historical_auto_and_reuses_best(self):
+        from scripts import platforms
+        larger = self.root / 'larger.mp4'
+        subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', self.video,
+                        '-vf', 'scale=320:240', '-c:v', 'mpeg4', '-c:a', 'copy', larger], check=True)
+        source = {'platform': 'bilibili', 'id': 'BVdemo', 'url': 'https://www.bilibili.com/video/BVdemo', 'part': 1}
+        low = {'url': 'low', 'width': 160, 'height': 120, 'has_video': True, 'has_audio': True}
+        high = {**low, 'url': 'high', 'width': 320, 'height': 240}
+        base = {'source': source, 'metadata': {'duration': 2}, 'subtitles': [], 'diagnostics': []}
+        def download(resolved, directory, **kwargs):
+            chosen = platforms.select_formats(resolved['formats'], want_video=kwargs['want_video'],
+                                              quality=kwargs['quality'], width=kwargs['width'])[0]
+            directory.mkdir(parents=True, exist_ok=True)
+            dest = directory / (chosen['url'] + '.mp4')
+            shutil.copy2(larger if chosen['url'] == 'high' else self.video, dest)
+            return dest
+        with patch.object(platforms, 'resolve', side_effect=[{**base, 'formats': [low]},
+                    {**base, 'formats': [low, high]}]) as resolve, patch.object(platforms, 'download', side_effect=download) as fetch:
+            code, first = self.call(source['url'], '--out', str(self.root / 'out'), '--get', 'video', '--quality', '1080p')
+            self.assertEqual(code, 0, first)
+            evidence = first['manifest']
+            data = json.loads(Path(evidence).read_text())
+            for artifact in data['artifacts']:
+                if artifact['type'] == 'video':
+                    artifact['quality'] = 'auto'  # Evidence from the former default.
+            Path(evidence).write_text(json.dumps(data))
+            code, upgraded = self.call('--evidence', evidence, '--get', 'video,audio')
+            self.assertEqual(code, 0, upgraded)
+            delivered = next(a['path'] for a in upgraded['artifacts'] if a['type'] == 'video')
+            self.assertEqual(media.probe(delivered)['video']['width'], 320)
+            self.assertTrue(media.probe(delivered)['audio'])
+            self.assertEqual(fetch.call_args.kwargs['quality'], 'source')
+            code, repeated = self.call('--evidence', evidence, '--get', 'video')
+            self.assertEqual(code, 0, repeated)
+            self.assertEqual(next(a['path'] for a in repeated['artifacts'] if a['type'] == 'video'), delivered)
+            self.assertEqual(fetch.call_count, 2)
+            self.assertEqual(resolve.call_count, 2)
+
+    def test_missing_expected_audio_is_not_delivered_or_reused(self):
+        from scripts import platforms
+        silent = self.root / 'silent.mp4'
+        subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', self.video,
+                        '-an', '-c:v', 'copy', silent], check=True)
+        base = {'source': {'platform': 'bilibili', 'id': 'BVdemo', 'url': 'https://www.bilibili.com/video/BVdemo', 'part': 1},
+                'metadata': {'duration': 2}, 'subtitles': [], 'diagnostics': [],
+                'formats': [{'url': 'media', 'width': 160, 'height': 120, 'has_video': True, 'has_audio': True}]}
+        def download(resolved, directory, **kwargs):
+            directory.mkdir(parents=True, exist_ok=True)
+            dest = directory / f'download-{fetch.call_count}.mp4'
+            shutil.copy2(silent if fetch.call_count == 1 else self.video, dest)
+            return dest
+        with patch.object(platforms, 'resolve', return_value=base), patch.object(platforms, 'download', side_effect=download) as fetch:
+            code, failed = self.call(base['source']['url'], '--out', str(self.root / 'out'), '--get', 'video')
+            self.assertEqual(code, 2, failed)
+            self.assertFalse(any(a['type'] == 'video' for a in failed['artifacts']))
+            self.assertTrue(any(d['code'] == 'invalid_media' for d in failed['diagnostics']))
+            code, good = self.call('--evidence', failed['manifest'], '--get', 'video')
+            self.assertEqual(code, 0, good)
+            delivered = next(a['path'] for a in good['artifacts'] if a['type'] == 'video')
+            shutil.copy2(silent, delivered)  # A cached file has lost its promised audio.
+            code, repaired = self.call('--evidence', good['manifest'], '--get', 'video')
+            self.assertEqual(code, 0, repaired)
+            repaired_path = next(a['path'] for a in repaired['artifacts'] if a['type'] == 'video')
+            self.assertTrue(media.probe(repaired_path)['audio'])
+            self.assertEqual(fetch.call_count, 3)
+
     def test_source_quality_does_not_promote_same_size_lower_bitrate_video(self):
         from scripts import platforms
         source = {'platform': 'bilibili', 'id': 'BVdemo', 'url': 'https://www.bilibili.com/video/BVdemo', 'part': 1}
@@ -191,7 +258,7 @@ class WatchTests(unittest.TestCase):
             return dest
         with patch.object(platforms, 'resolve', side_effect=[{**base, 'formats': [low]},
                     {**base, 'formats': [low, high]}]) as resolve, patch.object(platforms, 'download', side_effect=download) as fetch:
-            code, result = self.call(source['url'], '--out', str(self.root / 'out'), '--get', 'video')
+            code, result = self.call(source['url'], '--out', str(self.root / 'out'), '--get', 'video', '--quality', '1080p')
             self.assertEqual(code, 0, result)
             evidence = result['manifest']
             old_id = next(a['id'] for a in json.loads(Path(evidence).read_text())['artifacts'] if a['type'] == 'video')
@@ -199,7 +266,7 @@ class WatchTests(unittest.TestCase):
             self.assertEqual(code, 0, result)
             self.assertEqual(selected_bitrates, [100, 1000])
             data = json.loads(Path(evidence).read_text())
-            self.assertEqual(next(a['quality'] for a in data['artifacts'] if a['id'] == old_id), 'auto')
+            self.assertEqual(next(a['quality'] for a in data['artifacts'] if a['id'] == old_id), '1080p')
             code, result = self.call('--evidence', evidence, '--get', 'frames', '--at', '0.2', '--width', '0', '--quality', 'source')
             self.assertEqual(code, 0, result)
             frame = next(a['path'] for a in result['artifacts'] if a['type'] == 'frames')
@@ -220,12 +287,14 @@ class WatchTests(unittest.TestCase):
                 'dimension': {'width': 1920, 'height': 1080}}]}
         play = {'quality': 64, 'support_formats': [{'quality': 80, 'new_description': '1080P'},
                 {'quality': 64, 'new_description': '720P'}, {'quality': 32, 'new_description': '480P'}],
-                'dash': {'video': [{'id': 32, 'width': 852, 'height': 480, 'baseUrl': 'https://example.test/signed?secret=redacted'}]}}
+                'dash': {'video': [{'id': 32, 'width': 852, 'height': 480, 'frameRate': '60000/1001',
+                                    'baseUrl': 'https://example.test/signed?secret=redacted'}]}}
         with patch.object(bilibili, '_api', side_effect=[view, play]):
             resolved = bilibili.resolve('https://www.bilibili.com/video/BVdemo', need=['frames'])
         quality = resolved['metadata']['quality_info']
         self.assertEqual(quality['available_quality_ids'], [32])
         self.assertEqual(quality['available_sizes'], [(852, 480)])
+        self.assertAlmostEqual(resolved['formats'][0]['fps'], 60000 / 1001)
         self.assertEqual(resolved['metadata']['declared_dimensions']['width'], 1920)
         self.assertNotIn('secret', json.dumps(quality))
         self.assertEqual(resolved['diagnostics'][0]['code'], 'quality_unavailable')

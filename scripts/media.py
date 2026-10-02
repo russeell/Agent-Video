@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+from fractions import Fraction
 from functools import lru_cache
 from contextlib import contextmanager
 import json
@@ -42,6 +43,15 @@ def atomic_json(path, data):
         tmp.replace(path)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def frame_rate(value):
+    """Normalize numeric or rational frame rates supplied by media services."""
+    try:
+        rate = float(Fraction(str(value)))
+        return rate if math.isfinite(rate) and rate > 0 else None
+    except (ValueError, ZeroDivisionError, OverflowError):
+        return None
 
 
 def clock(value):

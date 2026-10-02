@@ -43,7 +43,8 @@ def parser():
     p.add_argument('--at')
     p.add_argument('--max-frames', type=int, default=12)
     p.add_argument('--width', type=int, default=768)
-    p.add_argument('--quality', choices=['auto', '1080p', 'source'], default='auto')
+    p.add_argument('--quality', choices=['auto', '1080p', 'source'], default='auto',
+                   help='video defaults to highest available; 1080p limits the tier; frames auto uses the requested width')
     p.add_argument('--language')
     p.add_argument('--audio-track', type=int)
     p.add_argument('--part', type=int)
@@ -59,6 +60,10 @@ def validate(args):
     args.kinds = list(dict.fromkeys(args.get.split(',')))
     if not args.kinds or any(k not in KINDS for k in args.kinds):
         raise InputError('--get accepts info,transcript,frames,audio,video.')
+    # Video delivery needs the best available source, including when combined
+    # with frames or audio. Keep auto's smaller dependencies for other tasks.
+    if 'video' in args.kinds and args.quality == 'auto':
+        args.quality = 'source'
     try:
         args.begin = media.clock(args.start) if args.start is not None else 0.0
         args.finish = media.clock(args.end) if args.end is not None else None
@@ -270,6 +275,10 @@ class Watch:
                 (self.access_context is not None and a.get('access_context') != self.access_context) or
                 (self.args.quality != 'auto' and a.get('quality') not in (self.args.quality, 'source') and not a.get('external'))):
                 continue
+            if kind == 'video':
+                info = media.probe(manifest.artifact_path(self.directory, a))
+                if not info['video'] or (a.get('audio_track') is not None and not info['audio']):
+                    continue
             return a
         return None
 
@@ -289,6 +298,9 @@ class Watch:
                     continue
                 path = manifest.artifact_path(self.directory, a)
                 info = media.probe(path)
+                if purpose == 'video' and (not info['video'] or
+                        (a.get('audio_track') is not None and not info['audio'])):
+                    continue
                 if purpose == 'audio' and not info['audio']:
                     continue
                 if purpose == 'frames' and a.get('quality') != 'source':
@@ -338,6 +350,8 @@ class Watch:
         info = media.probe(path)
         if purpose != 'audio' and not info['video']:
             raise media.Failure('no_video', 'Downloaded media has no video stream.')
+        if any(f.get('has_audio') for f in selected) and not info['audio']:
+            raise media.Failure('invalid_media', 'Downloaded media is missing the expected audio stream.')
         if purpose == 'audio':
             media.audio_index(info, self.args.audio_track)
         fields = {'source_range': {'start': 0, 'end': info['duration']}, 'quality': 'source' if purpose == 'frames' and self.args.width == 0 else self.args.quality, 'internal': True}

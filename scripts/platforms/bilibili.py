@@ -6,7 +6,7 @@ this implementation only uses the public single-work API responses.
 from datetime import datetime, timezone
 import re
 from urllib.parse import parse_qs, urlencode, urlsplit
-from . import Failure, diagnostic, read_json, request
+from . import Failure, diagnostic, read_json, request, media
 
 API = 'https://api.bilibili.com'
 HEADERS = {'Referer': 'https://www.bilibili.com/'}
@@ -92,6 +92,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
                                                   'width': stream.get('width'), 'height': stream.get('height'),
                                                   'has_video': kind == 'video', 'has_audio': kind == 'audio',
                                                   'quality_id': stream.get('id') if kind == 'video' else None,
+                                                  'fps': media.frame_rate(stream.get('frameRate') or stream.get('frame_rate')),
                                                   'bitrate': stream.get('bandwidth'), 'headers': HEADERS})
             if not result['formats']:
                 segments = play.get('durl') or []
