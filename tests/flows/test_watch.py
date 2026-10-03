@@ -83,6 +83,25 @@ class WatchTests(unittest.TestCase):
                     data = json.loads(Path(bad['manifest']).read_text())
                     self.assertEqual([a['type'] for a in data['artifacts']], ['info'])
 
+    def test_supporter_only_media_preserves_info_and_one_access_diagnostic(self):
+        from scripts import platforms
+        from scripts.platforms import bilibili
+        view = {'bvid': 'BVexample', 'title': 'Supporter-only work',
+                'is_upower_exclusive': True, 'is_upower_play': False,
+                'pages': [{'page': 1, 'cid': 7, 'duration': 16}]}
+        with patch.object(bilibili, '_api', return_value=view), \
+             patch.object(bilibili, '_playinfo') as player, \
+             patch.object(platforms, 'download_file') as fetch:
+            code, result = self.call('https://www.bilibili.com/video/BVexample',
+                                     '--get', 'video,audio', '--out', str(self.root / 'restricted'))
+        self.assertEqual(code, 2)
+        self.assertEqual(result['status'], 'partial')
+        self.assertEqual([a['type'] for a in result['artifacts']], ['info'])
+        self.assertEqual([d['code'] for d in result['diagnostics']], ['auth_required'])
+        self.assertTrue(json.loads(Path(result['artifacts'][0]['path']).read_text())['supporter_only'])
+        player.assert_not_called()
+        fetch.assert_not_called()
+
     def test_invalid_subtitle_response_preserves_frames_and_allows_retry(self):
         from scripts import platforms
         source = {'platform': 'youtube', 'id': 'abcdefghijk',

@@ -2,6 +2,8 @@
 
 Endpoint and DASH field research: yt-dlp's Unlicense bilibili extractor;
 this implementation only uses the public single-work API responses.
+Supporter-only access checks: yt-dlp commit
+51bab8a0116f4d8004c315706d809782607d5847, BiliBiliIE._real_extract.
 Subtitle wire fields and public player URL decoding adapted from BBDownT,
 commit 259a5558cee0a349a7ebb60bd31e40c88e5bc1ed.
 
@@ -222,6 +224,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
                            'part_title': page.get('part'), 'part': chosen, 'cid': cid,
                            'declared_dimensions': page.get('dimension') or view.get('dimension'),
                            'author': (view.get('owner') or {}).get('name'), 'description': view.get('desc'),
+                           'supporter_only': view.get('is_upower_exclusive'),
                            'published_at': view.get('pubdate'), 'duration': page.get('duration'),
                            'thumbnail': view.get('pic'), 'view_count': stats.get('view'),
                            'like_count': stats.get('like'), 'comment_count': stats.get('reply'),
@@ -258,6 +261,13 @@ def resolve(url, *, part=None, cookies=None, need=None):
                     result['diagnostics'].append(diagnostic('transcript', fallback))
     if needs.intersection(('video', 'audio', 'frames', 'media')):
         try:
+            # The work can be listed publicly while its full playback is paid.
+            # Only stop on explicit permission flags, not an opaque API code.
+            # A supplied Cookie file must still be allowed to request playback.
+            if not cookies and view.get('is_upower_exclusive') is True and view.get('is_upower_play') is False:
+                raise Failure('auth_required',
+                              'Bilibili identifies this as a supporter-only video; anonymous access cannot obtain the full work.',
+                              'Provide an explicit Cookie file from your own account with access to this video; retrying anonymously will not grant access.')
             play = _playinfo(bvid, cid, page.get('duration'), cookies)
             dash = play.get('dash') or {}
             for kind in ('video', 'audio'):

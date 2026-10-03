@@ -69,6 +69,8 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
 
 暂不支持其他网站、媒体直链、直播和 DRM 加密视频。已经下载的视频可以作为本地文件使用。
 
+B 站充电专属视频需要有观看权限的账号和显式提供的 Cookie 文件；能打开作品页面不代表能匿名播放。
+
 优先读取字幕，没有字幕时可配置语音转文字。文字稿可能有错字，也可能没有覆盖全片；截图只展示选取的时刻。
 
 <details>

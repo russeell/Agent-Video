@@ -189,6 +189,11 @@ def select_formats(formats, *, want_video=True, quality='auto', width=768):
 
 
 def download(resolved, directory, *, want_video=True, quality='auto', width=768, cookies=None, video_path=None):
+    if not resolved['formats']:
+        access_error = next((d for d in resolved.get('diagnostics', [])
+                             if d.get('stage') == 'media' and d.get('code') == 'auth_required'), None)
+        if access_error:
+            raise Failure(access_error['code'], access_error['message'], access_error.get('next_action'))
     selected = select_formats(resolved['formats'], want_video=want_video, quality=quality, width=width)
     expected_audio = (want_video != 'frames' and resolved.get('metadata', {}).get('audio_expected') is True)
     if want_video != 'frames' and all(f.get('has_audio') is False for f in selected):

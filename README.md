@@ -69,6 +69,8 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 
 Other websites, direct media links, live streams and DRM-protected videos are not supported. You can use a downloaded file as local input.
 
+Bilibili supporter-only videos require an account with access and an explicitly supplied Cookie file; a public video page does not guarantee public playback.
+
 Subtitles are used first. If none are available, optional speech-to-text can transcribe the audio. Transcripts may contain errors or cover only part of a video; screenshots show selected moments.
 
 <details>

@@ -47,6 +47,26 @@ class PlatformsTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'audio_unavailable')
         fetch.assert_not_called()
 
+    def test_no_formats_preserves_confirmed_media_access_restriction(self):
+        restriction = {'stage': 'media', 'code': 'auth_required',
+                       'message': 'This work requires an authorized account.',
+                       'next_action': 'Provide your own authorized Cookie file.'}
+        resolved = {'formats': [], 'diagnostics': [restriction]}
+        for want_video in (True, False, 'frames'):
+            with self.subTest(want_video=want_video), \
+                 patch.object(platforms, 'download_file') as fetch, \
+                 self.assertRaises(platforms.Failure) as caught:
+                platforms.download(resolved, 'unused', want_video=want_video)
+            self.assertEqual(caught.exception.code, 'auth_required')
+            self.assertEqual(str(caught.exception), restriction['message'])
+            self.assertEqual(caught.exception.next_action, restriction['next_action'])
+            fetch.assert_not_called()
+        # A subtitle-only restriction must not be mistaken for denied media.
+        resolved['diagnostics'] = [{**restriction, 'stage': 'transcript'}]
+        with self.assertRaises(platforms.Failure) as caught:
+            platforms.download(resolved, 'unused')
+        self.assertEqual(caught.exception.code, 'media_unavailable')
+
     def test_video_resolution_then_fps_then_bitrate(self):
         base = {'url': '30fps', 'width': 1920, 'height': 1080,
                 'has_video': True, 'has_audio': True, 'fps': 30, 'bitrate': 10000}

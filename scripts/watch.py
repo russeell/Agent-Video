@@ -210,7 +210,9 @@ class Watch:
             self.result.append(artifact)
 
     def fail(self, stage, exc):
-        self.diagnostics.append(diagnostic(stage, exc))
+        item = diagnostic(stage, exc)
+        if item not in self.diagnostics:
+            self.diagnostics.append(item)
         self.save()
 
     def resolve(self, media_needed=False):
