@@ -84,11 +84,14 @@ class HTTPTests(unittest.TestCase):
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
                 calls[self.path] = calls.get(self.path, 0) + 1
-                status = {'/down': 503, '/denied': 403, '/missing': 404}.get(self.path, 200)
+                status = {'/down': 503, '/denied': 403, '/missing': 404,
+                          '/partial-range': 206, '/full-range': 206}.get(self.path, 200)
                 self.send_response(status)
-                self.send_header('Content-Length', '4')
+                self.send_header('Content-Length', '2' if self.path == '/partial-range' else '4')
+                if status == 206:
+                    self.send_header('Content-Range', 'bytes 0-1/4' if self.path == '/partial-range' else 'bytes 0-3/4')
                 self.end_headers()
-                if self.path == '/permanent' or (self.path == '/short' and calls[self.path] == 1):
+                if self.path in ('/permanent', '/partial-range') or (self.path == '/short' and calls[self.path] == 1):
                     self.wfile.write(b'ab')
                 elif self.path != '/empty' or calls[self.path] > 1:
                     self.wfile.write(b'abcd')
@@ -106,6 +109,20 @@ class HTTPTests(unittest.TestCase):
                     path = platforms.download_file(root + route, directory / route[1:])
                     self.assertEqual(path.read_bytes(), b'abcd')
                     self.assertEqual(calls[route], 2)
+                for route in ('/full-range', '/ignored-range'):
+                    with self.subTest(route=route):
+                        path = platforms.download_file(root + route, directory / route[1:],
+                                                       headers={'Range': 'bytes=0-3'})
+                        self.assertEqual(path.read_bytes(), b'abcd')
+                        self.assertEqual(calls[route], 1)
+                path = directory / 'partial-range'
+                path.write_bytes(b'previous complete media')
+                with self.subTest('self-consistent partial response is not the full requested file'), \
+                     self.assertRaises(platforms.Failure) as caught:
+                    platforms.download_file(root + '/partial-range', path, headers={'range': 'bytes=0-3'})
+                self.assertEqual(caught.exception.code, 'download_incomplete')
+                self.assertEqual(calls['/partial-range'], 3)
+                self.assertEqual(path.read_bytes(), b'previous complete media')
                 for route, code, count in [('/permanent', 'download_incomplete', 3),
                                            ('/down', 'network_failed', 3),
                                            ('/denied', 'access_denied', 1),

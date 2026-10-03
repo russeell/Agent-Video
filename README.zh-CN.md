@@ -49,7 +49,7 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 | 来源 | 目前能做什么 |
 |---|---|
 | **本地文件** | 读取字幕、截图、导出音视频，也可以只处理指定片段 |
-| **YouTube** | 读取字幕，下载公开视频和 Shorts；已验证 1080p 下载 |
+| **YouTube** | 实验支持：读取字幕，下载公开视频和 Shorts；已验证 1080p 下载 |
 | **Bilibili** | 读取可用字幕，下载公开视频，也可以指定分 P；已验证 1080p 下载 |
 | **TikTok** | 实验支持：已用两个公开视频验证文字稿、下载和截图 |
 | **抖音** | 实验支持：已验证一个公开视频的信息、1080p 有声下载和截图；需要 [Chrome 或 Chromium](INSTALL.md#douyin) |

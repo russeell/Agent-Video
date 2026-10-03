@@ -215,10 +215,15 @@ def _media_formats(player, *, cookies=None, want_video=True, want_audio=True):
         if audio and native_ids is not None and track_id and track_id not in native_ids:
             continue
         extension = 'webm' if 'webm' in mime else ('mp4' if video else 'm4a')
+        headers = {'User-Agent': VISIONOS_CLIENT['userAgent']}
+        length = str(fmt.get('contentLength', ''))
+        if re.fullmatch(r'[0-9]+', length) and int(length) > 0:
+            # Full explicit ranges avoid slow unbounded Googlevideo responses.
+            headers['Range'] = f'bytes=0-{int(length) - 1}'
         formats.append({'url': fmt['url'], 'ext': extension, 'width': fmt.get('width'),
                         'height': fmt.get('height'), 'has_video': video, 'has_audio': audio,
                         'bitrate': fmt.get('bitrate'), 'fps': media.frame_rate(fmt.get('fps')),
-                        'headers': {'User-Agent': VISIONOS_CLIENT['userAgent']}})
+                        'headers': headers})
     language = _original_language(player)
     has_audio = any(f['has_audio'] for f in formats)
     if streaming.get('hlsManifestUrl') and (want_video or not has_audio):

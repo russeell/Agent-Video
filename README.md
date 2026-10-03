@@ -49,7 +49,7 @@ Ask your agent to follow [UPDATE.md](UPDATE.md). It keeps your existing environm
 | Source | What works today |
 |---|---|
 | **Local files** | Read subtitles, take screenshots, and export audio, video or a selected clip |
-| **YouTube** | Read captions and download public videos and Shorts; 1080p downloads tested |
+| **YouTube** | Experimental: read captions and download public videos and Shorts; 1080p downloads tested |
 | **Bilibili** | Read available captions and download public videos, including a chosen part; 1080p downloads tested |
 | **TikTok** | Experimental: transcripts, downloads and screenshots tested on two public videos |
 | **Douyin** | Experimental: information, 1080p downloads with audio and screenshots tested on one public video; requires [Chrome or Chromium](INSTALL.md#douyin) |

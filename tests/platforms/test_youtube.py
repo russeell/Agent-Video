@@ -92,6 +92,18 @@ class YouTubeTest(unittest.TestCase):
 
 
 class YouTubeMediaTest(unittest.TestCase):
+    def test_direct_formats_use_full_range_only_for_known_positive_size(self):
+        for length, expected in [('7285379', 'bytes=0-7285378'), (1, 'bytes=0-0'),
+                                 (None, None), ('', None), ('unknown', None),
+                                 ('-1', None), ('1.5', None), ('0', None), (0, None)]:
+            raw = [{'url': 'https://example.com/audio', 'mimeType': 'audio/webm',
+                    'contentLength': length}]
+            with self.subTest(length=length):
+                formats, _, diagnostics, _ = youtube._media_formats({'streamingData': {'adaptiveFormats': raw}})
+                self.assertEqual(formats[0]['headers'].get('Range'), expected)
+                self.assertEqual(formats[0]['headers']['User-Agent'], youtube.VISIONOS_CLIENT['userAgent'])
+                self.assertEqual(diagnostics, [])
+
     def test_original_direct_audio_precedes_higher_bitrate_dubbed_audio(self):
         raw = [{'url': 'https://example.com/video', 'mimeType': 'video/mp4',
                 'width': 1080, 'height': 1920, 'fps': 30},

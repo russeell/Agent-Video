@@ -8,6 +8,7 @@ import http.cookiejar
 import http.client
 import json
 from pathlib import Path
+import re
 import ssl
 import time
 import urllib.error
@@ -98,6 +99,9 @@ def download_file(url, path, *, headers=None, cookies=None):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name('.' + path.name + '.' + uuid.uuid4().hex + '.part')
+    requested = re.fullmatch(r'bytes=0-([0-9]+)', next(
+        (value for name, value in (headers or {}).items() if name.lower() == 'range'), ''))
+    expected_size = int(requested[1]) + 1 if requested else None
     try:
         for attempt in range(3):
             try:
@@ -113,7 +117,8 @@ def download_file(url, path, *, headers=None, cookies=None):
                         handle.write(chunk)
                         count += len(chunk)
                     size = response.headers.get('Content-Length')
-                    if not count or (size and count != int(size)):
+                    if (not count or (size and count != int(size))
+                            or expected_size is not None and count != expected_size):
                         raise Failure('download_incomplete', 'The resource download was empty or incomplete.', 'Retry acquisition.')
                 tmp.replace(path)
                 return path
