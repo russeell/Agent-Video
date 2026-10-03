@@ -15,18 +15,18 @@ Give your coding agent a **topic, a video link, or a local file**. Ask it to fin
 
 ## A real example
 
-![Agent Video demo: summarize a video, inspect 01:23, and save the complete file](assets/demo.gif)
+![Agent Video demo: understand a Dragon Ball clip, inspect 01:48, and save the video](assets/demo.gif)
 
 *Rendered demonstration using verified results. Acquisition waits are omitted.*
 
-We used [Vogue's *In The Bag* with Emma Watson](https://www.youtube.com/watch?v=yA79KYMLUpI) to get a summary from the English automatic captions, inspect a **clear frame at 01:23**, and save the **complete 1080p video with audio**. Follow-up questions reused the saved materials.
+In this [Dragon Ball clip](https://www.bilibili.com/video/BV1X5411b7xA/), the agent describes the scene from sampled frames, opens a **clear frame at 01:48**, and saves the **1080p video with audio**. Follow-up questions reuse the saved materials.
 
 ## What you can ask
 
 ```text
 Find a short Blender tutorial with an on-screen demonstration.
 Summarize this video: <video-url>
-What's happening at 01:23? Show me a clear frame.
+What's happening at 01:48? Show me a clear frame.
 Extract the transcript with timestamps.
 Download this video in the best available quality.
 ```
@@ -81,7 +81,7 @@ After installation, run from the project directory:
 .venv/bin/agent-video "<video-url-or-local-file>" --get transcript
 
 # Get a clear screenshot using the saved manifest
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 01:23 --width 0 --quality source
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 01:48 --width 0 --quality source
 
 # Save the same video
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get video

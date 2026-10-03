@@ -15,18 +15,18 @@
 
 ## 一个真实例子
 
-![Agent Video 演示：概括视频、查看 01:23 画面、保存完整文件](assets/demo.gif)
+![Agent Video 演示：理解七龙珠片段、查看 01:48 画面、保存视频](assets/demo.gif)
 
 *基于真实结果渲染的演示，省略了获取材料的等待时间。*
 
-我们用 [Emma Watson 在 Vogue 的《In The Bag》视频](https://www.youtube.com/watch?v=yA79KYMLUpI)，根据英文自动字幕概括内容，查看 **01:23 的清晰画面**，并保存了**完整的 1080p 有声视频**。之后的追问复用已保存的材料。
+用这段[七龙珠视频](https://www.bilibili.com/video/BV1X5411b7xA/)，Agent 根据抽样画面解释发生了什么，查看 **01:48 的清晰画面**，再保存 **1080p 有声视频**。后续追问复用已保存的材料。
 
 ## 你可以这样问
 
 ```text
 找一个有实际操作演示的 Blender 短教程。
 总结这个视频：<视频链接>
-01:23 在发生什么？截一张清晰的图给我看看。
+01:48 在发生什么？截一张清晰的图给我看看。
 提取带时间戳的文字稿。
 下载这个视频，选能获取到的最高画质。
 ```
@@ -81,7 +81,7 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
 .venv/bin/agent-video "<视频链接或本地文件>" --get transcript
 
 # 使用已保存的 manifest 获取清晰截图
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 01:23 --width 0 --quality source
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 01:48 --width 0 --quality source
 
 # 保存同一个视频
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
