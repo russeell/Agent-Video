@@ -1,5 +1,5 @@
 <h1 align="center">Agent Video</h1>
-<p align="center"><strong>Let your agent watch videos.</strong></p>
+<p align="center"><strong>Let your agent find and watch videos.</strong></p>
 
 <p align="center">
   <a href="https://github.com/russeell/Agent-Video/actions/workflows/test.yml"><img src="https://github.com/russeell/Agent-Video/actions/workflows/test.yml/badge.svg?branch=main" alt="Tests"></a>
@@ -11,48 +11,36 @@
   English · <a href="README.zh-CN.md">简体中文</a> · <a href="INSTALL.md">Install</a> · <a href="UPDATE.md">Update</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
-Send your agent a video link. Ask what it's about, what's happening at a particular moment, or ask it to download the video. Local videos and screen recordings work too.
-
-Agent Video gives your agent the **transcript, screenshots, audio, video files and video information** it needs. Your agent reads those materials and answers your question.
-
-Works with **Codex, Claude Code**, and other coding agents that support Skills.
+Give your coding agent a **topic, a video link, or a local file**. Agent Video supplies the **transcripts, frames and media** it needs to understand what is said and shown.
 
 ## What you can ask
 
 ```text
-Summarize this tutorial: <video-url>
+Find a short tutorial about <topic>.
+Summarize this video: <video-url>
+What's happening at 02:10? Show me a clear frame.
 Extract the transcript with timestamps.
-What's happening at 02:10? Show me a clear screenshot.
-Save the video in the best available quality.
+Download this video in the best available quality.
 ```
 
-You can also read code or charts in a recording, save an audio clip, or find a tutorial that meets your requirements. [Finding videos](SEARCH.md) uses your agent's search tools; Agent Video checks selected links and reads their content when needed.
+Your agent uses its [available search tools](SEARCH.md) to find candidates; Agent Video provides the information, words and images it needs to judge selected videos.
 
-Only the materials needed for your question are fetched. Follow-up questions reuse saved files, and you can keep the transcripts, screenshots and media yourself.
+Only the materials needed for your question are fetched. Follow-ups reuse saved files; downloading a video also works as a direct request.
 
 ## Install
 
-Copy this message to your agent:
+Works with **Codex, Claude Code**, and other coding agents that support Skills. Copy this message to your agent:
 
 ```text
 Install Agent Video by following this guide:
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-Requires **Python 3.11+** and **FFmpeg**; Douyin also needs **Google Chrome**, or **Chromium with its executable on `PATH`**. The [installation guide](INSTALL.md) covers setup, Windows and optional speech-to-text.
-
-After installation, ask your agent to use Agent Video with a link or local file.
+Requires **Python 3.11+** and **FFmpeg**. The [installation guide](INSTALL.md) covers setup, Windows and optional speech-to-text.
 
 ## Update
 
-Already installed? Copy this message to your agent:
-
-```text
-Update my existing Agent Video installation by following this guide:
-https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
-```
-
-The [update guide](UPDATE.md) keeps your Skill link, environment, models and saved files in place.
+Ask your agent to follow [UPDATE.md](UPDATE.md). It keeps your existing environment, Skill link, models and saved files.
 
 ## Supported sources
 
@@ -64,7 +52,7 @@ The [update guide](UPDATE.md) keeps your Skill link, environment, models and sav
 | **YouTube** | Read captions and download public videos and Shorts; 1080p downloads tested |
 | **Bilibili** | Read available captions and download public videos, including a chosen part; 1080p downloads tested |
 | **TikTok** | Experimental: transcripts, downloads and screenshots tested on two public videos |
-| **Douyin** | Experimental: information, 1080p downloads with audio and screenshots tested on one public video; requires the browser setup above |
+| **Douyin** | Experimental: information, 1080p downloads with audio and screenshots tested on one public video; requires [Chrome or Chromium](INSTALL.md#douyin) |
 
 Other websites, direct media links, live streams and DRM-protected videos are not supported. You can use a downloaded file as local input.
 

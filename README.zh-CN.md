@@ -1,5 +1,5 @@
 <h1 align="center">Agent Video</h1>
-<p align="center"><strong>Let your agent watch videos.</strong></p>
+<p align="center"><strong>Let your agent find and watch videos.</strong></p>
 
 <p align="center">
   <a href="https://github.com/russeell/Agent-Video/actions/workflows/test.yml"><img src="https://github.com/russeell/Agent-Video/actions/workflows/test.yml/badge.svg?branch=main" alt="测试"></a>
@@ -11,48 +11,36 @@
   <a href="README.md">English</a> · 简体中文 · <a href="INSTALL.md">安装</a> · <a href="UPDATE.md">更新</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
-把视频链接发给 Agent，问它视频讲了什么、某个时刻发生了什么，或者让它帮你下载。本地视频和录屏也能处理。
-
-Agent Video 为 Agent 提供所需的**文字稿、截图、音频、视频文件和视频信息**，由 Agent 阅读这些材料并回答你的问题。
-
-适用于 **Codex、Claude Code** 等支持 Skill 的 Coding Agent。
+给 Coding Agent 一个**主题、视频链接或本地文件**。Agent Video 提供所需的**文字稿、画面和音视频**，让 Agent 理解视频说了什么、展示了什么。
 
 ## 你可以这样问
 
 ```text
-总结这个教程：<视频链接>
-提取带时间戳的文字稿。
+找一个关于 <主题> 的短教程。
+总结这个视频：<视频链接>
 02:10 在发生什么？截一张清晰的图给我看看。
+提取带时间戳的文字稿。
 下载这个视频，选能获取到的最高画质。
 ```
 
-也可以让 Agent 看录屏里的代码或图表、保存一段音频，或找一个符合要求的视频教程。[找视频](SEARCH.md)用 Agent 已有的搜索工具，Agent Video 核对选中的链接，需要确认内容时再读取材料。
+Agent 使用[宿主已有搜索工具](SEARCH.md)寻找候选，Agent Video 提供所需的信息、文字和画面，由 Agent 根据用户条件判断是否符合要求。
 
-只获取回答问题需要的材料。继续追问同一个视频时，复用已经保存的文件；文字稿、截图和音视频也可以直接拿走。
+只获取回答问题需要的材料，继续追问时复用已保存的文件。也可以直接要求下载视频。
 
 ## 安装
 
-把下面这段话复制给 Agent：
+适用于 **Codex、Claude Code** 等支持 Skill 的 Coding Agent。把下面这段话复制给 Agent：
 
 ```text
 帮我按照这份指南安装 Agent Video：
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-需要 **Python 3.11+** 和 **FFmpeg**；抖音还需要 **Google Chrome**，或可在 `PATH` 找到可执行文件的 **Chromium**。[安装指南](INSTALL.md) 包含首次安装、Windows 和可选语音转文字的步骤。
-
-安装后，给 Agent 一个链接或本地文件，让它使用 Agent Video。
+需要 **Python 3.11+** 和 **FFmpeg**。[安装指南](INSTALL.md) 包含首次安装、Windows 和可选语音转文字的步骤。
 
 ## 更新
 
-已经安装过？把下面这段话复制给 Agent：
-
-```text
-帮我按照这份指南更新已有的 Agent Video：
-https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
-```
-
-[更新指南](UPDATE.md) 保留现有 Skill 链接、环境、模型和已保存的文件。
+让 Agent 按 [UPDATE.md](UPDATE.md) 更新，保留现有环境、Skill 链接、模型和已保存的文件。
 
 ## 支持哪些视频
 
@@ -64,7 +52,7 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
 | **YouTube** | 读取字幕，下载公开视频和 Shorts；已验证 1080p 下载 |
 | **Bilibili** | 读取可用字幕，下载公开视频，也可以指定分 P；已验证 1080p 下载 |
 | **TikTok** | 实验支持：已用两个公开视频验证文字稿、下载和截图 |
-| **抖音** | 实验支持：已验证一个公开视频的信息、1080p 有声下载和截图；需要上述浏览器环境 |
+| **抖音** | 实验支持：已验证一个公开视频的信息、1080p 有声下载和截图；需要 [Chrome 或 Chromium](INSTALL.md#douyin) |
 
 暂不支持其他网站、媒体直链、直播和 DRM 加密视频。已经下载的视频可以作为本地文件使用。
 
