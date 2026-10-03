@@ -11,21 +11,23 @@
   English · <a href="README.zh-CN.md">简体中文</a> · <a href="INSTALL.md">Install</a> · <a href="UPDATE.md">Update</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
-Give your coding agent a **topic, a video link, or a local file**. Agent Video supplies the **transcripts, frames and media** it needs to understand what is said and shown.
+Give your coding agent a **topic, a video link, or a local file**. Ask it to find a useful video, explain what is said and shown, or save the files you need.
+
+## A real example
+
+We used [Vogue's *In The Bag* with Emma Watson](https://www.youtube.com/watch?v=yA79KYMLUpI) to get a summary from the English automatic captions, inspect a **clear frame at 01:23**, and save the **complete 1080p video with audio**. Follow-up questions reused the saved materials.
 
 ## What you can ask
 
 ```text
-Find a short tutorial about <topic>.
+Find a short Blender tutorial with an on-screen demonstration.
 Summarize this video: <video-url>
-What's happening at 02:10? Show me a clear frame.
+What's happening at 01:23? Show me a clear frame.
 Extract the transcript with timestamps.
 Download this video in the best available quality.
 ```
 
-Your agent uses its [available search tools](SEARCH.md) to find candidates; Agent Video provides the information, words and images it needs to judge selected videos.
-
-Only the materials needed for your question are fetched. Follow-ups reuse saved files; downloading a video also works as a direct request.
+Your agent uses its [available search tools](SEARCH.md) to find candidates. Agent Video gets the selected video's information, transcript, frames or media files as needed. You can also ask it to download a video directly.
 
 ## Install
 
@@ -40,7 +42,14 @@ Requires **Python 3.11+** and **FFmpeg**. The [installation guide](INSTALL.md) c
 
 ## Update
 
-Ask your agent to follow [UPDATE.md](UPDATE.md). It keeps your existing environment, Skill link, models and saved files.
+Copy this message to your agent:
+
+```text
+Update my existing Agent Video installation by following this guide:
+https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
+```
+
+The [update guide](UPDATE.md) preserves your existing setup and saved files.
 
 ## Supported sources
 
@@ -68,7 +77,7 @@ After installation, run from the project directory:
 .venv/bin/agent-video "<video-url-or-local-file>" --get transcript
 
 # Get a clear screenshot using the saved manifest
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 02:10 --width 0 --quality source
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 01:23 --width 0 --quality source
 
 # Save the same video
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get video

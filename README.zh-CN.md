@@ -11,21 +11,23 @@
   <a href="README.md">English</a> · 简体中文 · <a href="INSTALL.md">安装</a> · <a href="UPDATE.md">更新</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
-给 Coding Agent 一个**主题、视频链接或本地文件**。Agent Video 提供所需的**文字稿、画面和音视频**，让 Agent 理解视频说了什么、展示了什么。
+给 Coding Agent 一个**主题、视频链接或本地文件**。让它帮你找视频、理解视频说了什么和展示了什么，或者保存你需要的文件。
+
+## 一个真实例子
+
+我们用 [Emma Watson 在 Vogue 的《In The Bag》视频](https://www.youtube.com/watch?v=yA79KYMLUpI)，根据英文自动字幕概括内容，查看 **01:23 的清晰画面**，并保存了**完整的 1080p 有声视频**。之后的追问复用已保存的材料。
 
 ## 你可以这样问
 
 ```text
-找一个关于 <主题> 的短教程。
+找一个有实际操作演示的 Blender 短教程。
 总结这个视频：<视频链接>
-02:10 在发生什么？截一张清晰的图给我看看。
+01:23 在发生什么？截一张清晰的图给我看看。
 提取带时间戳的文字稿。
 下载这个视频，选能获取到的最高画质。
 ```
 
-Agent 使用[宿主已有搜索工具](SEARCH.md)寻找候选，Agent Video 提供所需的信息、文字和画面，由 Agent 根据用户条件判断是否符合要求。
-
-只获取回答问题需要的材料，继续追问时复用已保存的文件。也可以直接要求下载视频。
+Agent 使用[宿主已有搜索工具](SEARCH.md)寻找候选，Agent Video 按需获取选中视频的信息、文字稿、画面和音视频。你也可以直接要求下载视频。
 
 ## 安装
 
@@ -40,7 +42,14 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 
 ## 更新
 
-让 Agent 按 [UPDATE.md](UPDATE.md) 更新，保留现有环境、Skill 链接、模型和已保存的文件。
+把下面这段话复制给 Agent：
+
+```text
+帮我按照这份指南更新已安装的 Agent Video：
+https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
+```
+
+[更新指南](UPDATE.md)会保留现有环境和已保存的文件。
 
 ## 支持哪些视频
 
@@ -68,7 +77,7 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 .venv/bin/agent-video "<视频链接或本地文件>" --get transcript
 
 # 使用已保存的 manifest 获取清晰截图
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 02:10 --width 0 --quality source
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 01:23 --width 0 --quality source
 
 # 保存同一个视频
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
