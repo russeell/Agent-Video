@@ -13,20 +13,20 @@
 
 Give your coding agent a **topic, a video link, or a local file**. Ask it to find a useful video, explain what is said and shown, or save the files you need.
 
-## A real example
+## Example walkthrough
 
 ![Agent Video demo: understand a Dragon Ball clip, inspect 01:48, and save the video](assets/demo.gif)
 
-*Rendered demonstration using verified results. Acquisition waits are omitted.*
+*Animation made from verified outputs, not a raw session recording. Material acquisition waits are omitted.*
 
-In this [Dragon Ball clip](https://www.bilibili.com/video/BV1X5411b7xA/), the agent describes the scene from sampled frames, opens a **clear frame at 01:48**, and saves the **1080p video with audio**. Follow-up questions reuse the saved materials.
+Using this [Dragon Ball clip](https://www.bilibili.com/video/BV1X5411b7xA/): describe sampled frames → inspect **01:48** → save the **1080p video with audio**, reusing saved materials.
 
 ## What you can ask
 
 ```text
 Find a short Blender tutorial with an on-screen demonstration.
 Summarize this video: <video-url>
-What's happening at 01:48? Show me a clear frame.
+What does this video show at <timestamp>? Show me a clear frame.
 Extract the transcript with timestamps.
 Download this video in the best available quality.
 ```
@@ -81,13 +81,13 @@ After installation, run from the project directory:
 .venv/bin/agent-video "<video-url-or-local-file>" --get transcript
 
 # Get a clear screenshot using the saved manifest
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 01:48 --width 0 --quality source
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 00:10 --width 0 --quality source
 
-# Save the same video
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
+# Download a video directly
+.venv/bin/agent-video "<video-url>" --get video
 ```
 
-`--get` accepts `info,transcript,frames,audio,video`, separately or together. Files are saved in `.agent-video/` by default. The command returns JSON with file paths and a `manifest.json` that tracks saved materials for reuse. Exit code `2` means partial success; completed files remain usable.
+Choose a time within the video's duration for `--at`. `--get` accepts `info,transcript,frames,audio,video`, separately or together. Files are saved in `.agent-video/` by default. The command returns JSON with file paths and a `manifest.json`; use `--evidence` to reuse its materials for follow-ups or downloads. Exit code `2` means partial success; completed files remain usable.
 
 See `--help` for time ranges, language, quality, video parts and Cookie files; `--version` shows the installed version. Windows uses `.venv\Scripts\agent-video.exe`.
 

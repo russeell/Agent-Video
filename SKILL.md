@@ -5,9 +5,9 @@ description: 寻找、阅读、总结或下载视频；提取文字稿、指定�
 
 # Agent Video
 
-Let your agent watch videos.
+Let your agent find and watch videos.
 
-根据用户问题获取必要 evidence，实际阅读后回答或交付文件。工具负责获取与媒体处理；搜索、理解和判断由宿主 Agent 完成。
+根据用户问题获取必要 evidence。内容问题需实际阅读相关材料；只要文件时可直接下载、交付。工具负责获取与媒体处理；搜索、理解和判断由宿主 Agent 完成。
 
 ## 选择 evidence
 
@@ -19,11 +19,11 @@ Let your agent watch videos.
 | 标题、作者、时长等基本信息 | `info`（metadata） |
 | 综合理解视频 | 按问题组合必要的文字与画面 |
 
-寻找视频时先读 [SEARCH.md](SEARCH.md)，使用实际可用的宿主搜索工具。用户指定平台优先，其次当前视频任务的平台，否则默认 YouTube 并简短说明；只有用户要求才跨平台。筛选单视频链接、按作品去重，并用 `--get info` 核对少量候选。只要链接时无需观看；内容条件需实际读材料验证。保留链接与 manifest，推荐注明已核对信息、已读文字或已看抽样画面。
+寻找视频时，使用宿主搜索能力发现候选，根据用户实际条件获取最少必要材料；细节见 [SEARCH.md](SEARCH.md)。
 
 ## 核心规则
 
-1. 打开返回的 evidence 再回答；文件名、标题和 metadata 不代表读过内容。
+1. 回答视频内容问题前，打开返回的相关 evidence；文件名、标题和 metadata 不代表读过内容。
 2. 视觉问题必须打开 frame。画面文字、讲话文字稿和作品简介分别表达；抽样不代表完整阅读。
 3. 优先字幕；无可用字幕且 ASR 已配置时，程序才使用实际音轨转录。
 4. 已有 manifest 时使用 `--evidence` 补取或复用，不重新获取已有材料。同一 evidence 串行调用。
@@ -42,12 +42,12 @@ Let your agent watch videos.
 
 # 视觉概览；指定时刻需看清小字时取源尺寸
 "<skill_dir>/.venv/bin/agent-video" "<url-or-file>" --get frames --max-frames 6
-"<skill_dir>/.venv/bin/agent-video" --evidence "<manifest.json>" --get frames --at 02:10 --width 0 --quality source
+"<skill_dir>/.venv/bin/agent-video" --evidence "<manifest.json>" --get frames --at 00:10 --width 0 --quality source
 
-# 保存同一视频，复用已有材料
-"<skill_dir>/.venv/bin/agent-video" --evidence "<manifest.json>" --get video
+# 直接下载；已有 manifest 时改用 --evidence 复用
+"<skill_dir>/.venv/bin/agent-video" "<video-url>" --get video
 ```
 
-`--get` 可组合 `info,transcript,frames,audio,video`，默认 `transcript`；区间、语言、分 P 等参数见 `--help`。ASR 使用调用进程的 `AGENT_VIDEO_ASR_MODEL`，模型准备见安装文档。
+`--at` 应选择视频时长内的时刻。`--get` 可组合 `info,transcript,frames,audio,video`，默认 `transcript`；区间、语言、分 P 等参数见 `--help`。ASR 使用调用进程的 `AGENT_VIDEO_ASR_MODEL`，模型准备见安装文档。
 
 JSON 返回文件路径、manifest 和 diagnostics。打开文字稿的 `readable_path` 或图片；需要来源、范围及帧的 `actual_time` 时读取 manifest。回答注明实际 evidence、原视频时间和覆盖范围，交付时附文件链接。

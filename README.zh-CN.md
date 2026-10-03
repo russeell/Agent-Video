@@ -13,20 +13,20 @@
 
 给 Coding Agent 一个**主题、视频链接或本地文件**。让它帮你找视频、理解视频说了什么和展示了什么，或者保存你需要的文件。
 
-## 一个真实例子
+## 使用示例
 
 ![Agent Video 演示：理解七龙珠片段、查看 01:48 画面、保存视频](assets/demo.gif)
 
-*基于真实结果渲染的演示，省略了获取材料的等待时间。*
+*基于已验证输出制作的演示动画，非原始会话录屏；获取材料的等待时间已省略。*
 
-用这段[七龙珠视频](https://www.bilibili.com/video/BV1X5411b7xA/)，Agent 根据抽样画面解释发生了什么，查看 **01:48 的清晰画面**，再保存 **1080p 有声视频**。后续追问复用已保存的材料。
+用这段[七龙珠视频](https://www.bilibili.com/video/BV1X5411b7xA/)：解释抽样画面 → 查看 **01:48** → 保存 **1080p 有声视频**，复用已保存的材料。
 
 ## 你可以这样问
 
 ```text
 找一个有实际操作演示的 Blender 短教程。
 总结这个视频：<视频链接>
-01:48 在发生什么？截一张清晰的图给我看看。
+这个视频在 <时间点> 展示了什么？截一张清晰的图给我看看。
 提取带时间戳的文字稿。
 下载这个视频，选能获取到的最高画质。
 ```
@@ -81,13 +81,13 @@ https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
 .venv/bin/agent-video "<视频链接或本地文件>" --get transcript
 
 # 使用已保存的 manifest 获取清晰截图
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 01:48 --width 0 --quality source
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 00:10 --width 0 --quality source
 
-# 保存同一个视频
-.venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
+# 直接下载视频
+.venv/bin/agent-video "<video-url>" --get video
 ```
 
-`--get` 支持 `info,transcript,frames,audio,video`，可以单独获取，也可以组合。文件默认保存在 `.agent-video/`。命令返回 JSON，其中有文件路径和用于记录、复用材料的 `manifest.json`。退出码 `2` 表示部分成功，已完成的文件仍可使用。
+`--at` 应选择视频时长内的时刻。`--get` 支持 `info,transcript,frames,audio,video`，可以单独获取，也可以组合。文件默认保存在 `.agent-video/`。命令返回 JSON，其中有文件路径和 `manifest.json`；追问或下载时用 `--evidence` 复用已有材料。退出码 `2` 表示部分成功，已完成的文件仍可使用。
 
 时间范围、语言、画质、分 P 和 Cookie 文件等参数见 `--help`；`--version` 显示安装版本。Windows 使用 `.venv\Scripts\agent-video.exe`。
 
