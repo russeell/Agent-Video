@@ -15,6 +15,10 @@ Give your coding agent a **topic, a video link, or a local file**. Ask it to fin
 
 ## A real example
 
+![Agent Video demo: summarize a video, inspect 01:23, and save the complete file](assets/demo.gif)
+
+*Rendered demonstration using verified results. Acquisition waits are omitted.*
+
 We used [Vogue's *In The Bag* with Emma Watson](https://www.youtube.com/watch?v=yA79KYMLUpI) to get a summary from the English automatic captions, inspect a **clear frame at 01:23**, and save the **complete 1080p video with audio**. Follow-up questions reused the saved materials.
 
 ## What you can ask

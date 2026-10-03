@@ -15,6 +15,10 @@
 
 ## 一个真实例子
 
+![Agent Video 演示：概括视频、查看 01:23 画面、保存完整文件](assets/demo.gif)
+
+*基于真实结果渲染的演示，省略了获取材料的等待时间。*
+
 我们用 [Emma Watson 在 Vogue 的《In The Bag》视频](https://www.youtube.com/watch?v=yA79KYMLUpI)，根据英文自动字幕概括内容，查看 **01:23 的清晰画面**，并保存了**完整的 1080p 有声视频**。之后的追问复用已保存的材料。
 
 ## 你可以这样问
