@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import http.cookiejar
 import http.client
+import gzip
 import json
 from pathlib import Path
 import re
@@ -15,6 +16,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import zlib
 
 try:
     from .. import media
@@ -51,7 +53,7 @@ def _opener(cookies=None):
                                       urllib.request.HTTPSHandler(context=context))
 
 
-def request(url, *, headers=None, cookies=None, attempts=3, data=None):
+def request(url, *, headers=None, cookies=None, attempts=3, data=None, opener=None):
     """Open HTTP, optionally letting a full-body download own its retries."""
     if urllib.parse.urlsplit(url).scheme not in ('http', 'https'):
         raise Failure('invalid_url', 'Only HTTP(S) resource addresses are supported.')
@@ -59,7 +61,7 @@ def request(url, *, headers=None, cookies=None, attempts=3, data=None):
                 if k.lower() not in ('cookie', 'authorization', 'proxy-authorization')}
     for attempt in range(attempts):
         try:
-            return _opener(cookies).open(urllib.request.Request(url, data=data, headers={'User-Agent': UA, **supplied}), timeout=30)
+            return (opener or _opener(cookies)).open(urllib.request.Request(url, data=data, headers={'User-Agent': UA, **supplied}), timeout=30)
         except urllib.error.HTTPError as exc:
             exc.close()
             if exc.code in (401, 403):
@@ -75,17 +77,32 @@ def request(url, *, headers=None, cookies=None, attempts=3, data=None):
         time.sleep(.25 * (attempt + 1))
 
 
-def read_text(url, *, headers=None, cookies=None, data=None):
+def response_text(response):
+    """Decode text responses, including compression used by platform pages."""
     try:
-        with request(url, headers=headers, cookies=cookies, data=data) as response:
-            return response.read().decode('utf-8-sig', errors='replace')
+        body = response.read()
+        encoding = response.headers.get('Content-Encoding', '').lower().strip()
+        if encoding == 'gzip':
+            body = gzip.decompress(body)
+        elif encoding == 'deflate':
+            body = zlib.decompress(body)
+        elif encoding not in ('', 'identity'):
+            raise Failure('encoding_unsupported', 'The platform returned an unsupported HTTP content encoding.')
+        return body.decode('utf-8-sig', errors='replace')
+    except (gzip.BadGzipFile, EOFError, zlib.error):
+        raise Failure('parse_failed', 'The platform returned an invalid compressed response.') from None
     except (OSError, http.client.HTTPException):
         raise Failure('network_failed', 'HTTP response could not be completely read.', 'Retry acquisition later.') from None
 
 
-def read_json(url, *, headers=None, cookies=None, data=None):
+def read_text(url, *, headers=None, cookies=None, data=None, opener=None):
+    with request(url, headers=headers, cookies=cookies, data=data, opener=opener) as response:
+        return response_text(response)
+
+
+def read_json(url, *, headers=None, cookies=None, data=None, opener=None):
     try:
-        return json.loads(read_text(url, headers=headers, cookies=cookies, data=data))
+        return json.loads(read_text(url, headers=headers, cookies=cookies, data=data, opener=opener))
     except ValueError:
         raise Failure('parse_failed', 'The platform returned unrecognized JSON.', 'Retry later; the platform response may have changed.') from None
 
@@ -168,10 +185,14 @@ def select_formats(formats, *, want_video=True, quality='auto', width=768):
     videos = [f for f in formats if f.get('has_video')]
     if not videos:
         raise Failure('media_unavailable', 'No downloadable video stream is available.', 'Retry later or use a local media file.')
+    complete_sizes = all(f.get('width') and f.get('height') for f in videos)
     def rank(f):
         # Bitrate is only a final tie-breaker; it is not a codec-independent
-        # measure of visual quality.
-        return ((f.get('width') or 0) * (f.get('height') or 0),
+        # measure of visual quality. Some APIs expose only a resolution label;
+        # compare those labels without inventing the missing width.
+        resolution = ((f['width'] * f['height'], 0) if complete_sizes else
+                      (f.get('height') or 0, f.get('width') or 0))
+        return (resolution,
                 f.get('fps') or 0, f.get('bitrate') or 0)
     if quality == 'source' or (quality == 'auto' and want_video != 'frames') or (want_video == 'frames' and width == 0):
         selected = max(videos, key=rank)
@@ -183,8 +204,13 @@ def select_formats(formats, *, want_video=True, quality='auto', width=768):
                     and max(f.get('width') or 0, f.get('height') or 0) <= 1920]
         selected = max(suitable, key=rank) if suitable else min(videos, key=rank)
     result = [selected]
-    if want_video != 'frames' and selected.get('has_audio') is False and audio:
-        result.append(max(audio, key=lambda f: (not f.get('has_video'), f.get('bitrate') or 0)))
+    if want_video != 'frames' and selected.get('has_audio') is False:
+        if selected.get('audio_group'):
+            audio = [f for f in audio if f.get('audio_group') == selected['audio_group']]
+            if not audio:
+                raise Failure('audio_unavailable', 'The selected HLS video has no matching original audio rendition.')
+        if audio:
+            result.append(max(audio, key=lambda f: (not f.get('has_video'), f.get('bitrate') or 0)))
     return result
 
 
@@ -277,5 +303,39 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if host.endswith('.douyin.com') or host in ('douyin.com', 'iesdouyin.com', 'www.iesdouyin.com'):
         from . import douyin
         return douyin.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com'):
+        from . import twitter
+        return twitter.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('reddit.com', 'www.reddit.com', 'old.reddit.com', 'new.reddit.com', 'm.reddit.com'):
+        from . import reddit
+        return reddit.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('instagram.com', 'www.instagram.com'):
+        from . import instagram
+        return instagram.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('xiaohongshu.com', 'www.xiaohongshu.com', 'xhslink.com', 'www.xhslink.com'):
+        from . import xiaohongshu
+        return xiaohongshu.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('kuaishou.com', 'www.kuaishou.com', 'www1.kuaishou.com', 'www2.kuaishou.com',
+                'v.kuaishou.com', 'www.gifshow.com', 'v.m.chenzhongtech.com'):
+        from . import kuaishou
+        return kuaishou.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('vimeo.com', 'www.vimeo.com', 'player.vimeo.com'):
+        from . import vimeo
+        return vimeo.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('dailymotion.com', 'www.dailymotion.com', 'geo.dailymotion.com', 'dai.ly'):
+        from . import dailymotion
+        return dailymotion.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('ted.com', 'www.ted.com'):
+        from . import ted
+        return ted.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('twitch.tv', 'www.twitch.tv', 'm.twitch.tv', 'go.twitch.tv', 'clips.twitch.tv'):
+        from . import twitch
+        return twitch.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('weibo.com', 'www.weibo.com', 'm.weibo.cn', 'video.weibo.com'):
+        from . import weibo
+        return weibo.resolve(url, part=part, cookies=cookies, need=need)
+    if re.fullmatch(r'(?:(?:www|[a-z]{2})\.)?pornhub\.(?:com|net|org)', host):
+        from . import pornhub
+        return pornhub.resolve(url, part=part, cookies=cookies, need=need)
     raise Failure('unsupported_source', 'This website is not supported by Agent Video.',
                   'Use a supported platform video URL or a local media file.')

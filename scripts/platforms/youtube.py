@@ -134,63 +134,11 @@ def _native_audio_ids(formats):
 
 def _hls_formats(text, url, *, include_audio=True):
     if __package__ == 'scripts.platforms':
-        from ..streams import _attrs, _value
+        from ..streams import hls_formats
     else:
-        from streams import _attrs, _value
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if not lines or lines[0] != '#EXTM3U':
-        raise Failure('parse_failed', 'YouTube HLS response is not a playlist.')
-    if any(line.startswith(('#EXT-X-KEY:', '#EXT-X-SESSION-KEY:'))
-           and _value(_attrs(line.split(':', 1)[1]), 'METHOD') != 'NONE' for line in lines):
-        raise Failure('encrypted_stream_unsupported', 'Encrypted YouTube HLS is not supported.')
-    groups = {}
-    for line in lines:
-        if line.startswith('#EXT-X-MEDIA:'):
-            attrs = _attrs(line.split(':', 1)[1])
-            if _value(attrs, 'TYPE') == 'AUDIO' and _value(attrs, 'URI'):
-                groups.setdefault(_value(attrs, 'GROUP-ID'), []).append(attrs)
-    headers = {'User-Agent': VISIONOS_CLIENT['userAgent']}
-    formats = []
-    for index, line in enumerate(lines):
-        if not line.startswith('#EXT-X-STREAM-INF:'):
-            continue
-        attrs = _attrs(line.split(':', 1)[1])
-        if index + 1 >= len(lines) or lines[index + 1].startswith('#'):
-            raise Failure('parse_failed', 'YouTube HLS variant has no resource address.')
-        resolution = _value(attrs, 'RESOLUTION')
-        if not re.fullmatch(r'\d+x\d+', resolution):
-            continue
-        width, height = map(int, resolution.split('x'))
-        bandwidth = _value(attrs, 'BANDWIDTH', '0')
-        if not bandwidth.isdigit():
-            raise Failure('parse_failed', 'YouTube HLS variant has an invalid bandwidth.')
-        group = _value(attrs, 'AUDIO')
-        formats.append({'url': urljoin(url, lines[index + 1]), 'ext': 'm3u8', 'protocol': 'hls',
-                        'width': width, 'height': height, 'fps': media.frame_rate(_value(attrs, 'FRAME-RATE')),
-                        'bitrate': int(bandwidth), 'has_video': True,
-                        'has_audio': False if group in groups else None,
-                        'audio_group': group, 'headers': headers})
-    language = None
-    if include_audio and formats:
-        best = max(formats, key=lambda f: (f['width'] * f['height'], f['fps'] or 0, f['bitrate']))
-        renditions = groups.get(best['audio_group'], [])
-        native = [a for a in renditions if 'original' in _value(a, 'NAME').lower()]
-        if not native:
-            native = [a for a in renditions if _value(a, 'DEFAULT') == 'YES'
-                      and 'dubbed' not in _value(a, 'NAME').lower()]
-        if not native and len(renditions) == 1 and 'dubbed' not in _value(renditions[0], 'NAME').lower():
-            native = renditions
-        if renditions and len(native) != 1:
-            raise Failure('audio_ambiguous', 'YouTube HLS does not identify one original or default audio track.',
-                          'Provide a local video with the intended audio track.')
-        if native:
-            audio = native[0]
-            if 'original' in _value(audio, 'NAME').lower():
-                language = _value(audio, 'LANGUAGE') or None
-            formats.append({'url': urljoin(url, _value(audio, 'URI')), 'ext': 'm3u8', 'protocol': 'hls',
-                            'has_video': False, 'has_audio': True, 'audio_group': best['audio_group'],
-                            'language': _value(audio, 'LANGUAGE') or None, 'headers': headers})
-    return formats, language
+        from streams import hls_formats
+    return hls_formats(text, url, include_audio=include_audio,
+                       headers={'User-Agent': VISIONOS_CLIENT['userAgent']})
 
 
 def _media_formats(player, *, cookies=None, want_video=True, want_audio=True):

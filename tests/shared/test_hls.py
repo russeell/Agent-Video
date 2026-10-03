@@ -13,6 +13,30 @@ from scripts import streams
 
 
 class HLSTests(unittest.TestCase):
+    def test_master_pairs_audio_with_selected_video_quality(self):
+        master = '''#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="low",NAME="English original",LANGUAGE="en",URI="audio-low.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="high",NAME="English original",LANGUAGE="en",URI="audio-high.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1920x1080,AUDIO="low"
+video-low.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=3840x2160,AUDIO="high"
+video-high.m3u8
+'''
+        formats, language = streams.hls_formats(master, 'https://example.test/master.m3u8',
+                                               headers={'Referer': 'https://example.test/'})
+        self.assertEqual(language, 'en')
+        for quality, group in [('source', 'high'), ('1080p', 'low')]:
+            with self.subTest(quality=quality):
+                selected = platforms.select_formats(formats, quality=quality)
+                self.assertEqual([f['audio_group'] for f in selected], [group, group])
+                self.assertTrue(all(f['headers']['Referer'] == 'https://example.test/' for f in selected))
+        frames = platforms.select_formats(formats, want_video='frames', width=0)
+        self.assertEqual(len(frames), 1)
+        without_high_audio = [f for f in formats if not (f.get('has_audio') and f['audio_group'] == 'high')]
+        with self.assertRaises(platforms.Failure) as caught:
+            platforms.select_formats(without_high_audio, quality='source')
+        self.assertEqual(caught.exception.code, 'audio_unavailable')
+
     @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg and ffprobe required')
     def test_real_http_vod_hls(self):
         observed = []

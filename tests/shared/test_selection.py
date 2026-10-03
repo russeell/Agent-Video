@@ -6,6 +6,15 @@ from scripts import platforms
 
 
 class PlatformsTest(unittest.TestCase):
+    def test_resolution_labels_without_width_select_highest_available(self):
+        formats = [{'url': f'https://example.test/{height}.mp4', 'height': height,
+                    'has_video': True, 'has_audio': True} for height in (720, 2160, 1080)]
+        for quality, height in [('source', 2160), ('auto', 2160), ('1080p', 1080)]:
+            with self.subTest(quality=quality):
+                chosen = platforms.select_formats(formats, quality=quality)[0]
+                self.assertEqual(chosen['height'], height)
+                self.assertNotIn('width', chosen)
+
     def test_subtitle_language_and_origin(self):
         tracks = [{'url': 'a', 'language': 'en', 'origin': 'platform_auto'},
                   {'url': 'b', 'language': 'en', 'origin': 'platform_manual'},

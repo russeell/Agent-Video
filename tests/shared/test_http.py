@@ -1,5 +1,6 @@
 """Shared HTTP transport, retries and credential boundaries; local servers only."""
 import http.server
+import gzip
 import io
 import json
 import tempfile
@@ -7,11 +8,59 @@ import threading
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 import unittest
+import zlib
 
 from scripts import platforms
 
 
 class HTTPTests(unittest.TestCase):
+    def test_compressed_json_and_guest_session_are_scoped_to_explicit_opener(self):
+        observed = []
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                observed.append(self.headers.get('Cookie', ''))
+                payload = gzip.compress(b'{"ok":true}')
+                self.send_response(200)
+                self.send_header('Content-Encoding', 'gzip')
+                self.send_header('Content-Length', str(len(payload)))
+                if self.path == '/guest':
+                    self.send_header('Set-Cookie', 'visitor=anonymous; Path=/')
+                self.end_headers()
+                self.wfile.write(payload)
+            def log_message(self, *args):
+                pass
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            root = f'http://127.0.0.1:{server.server_port}'
+            opener = platforms._opener()
+            for address in (root + '/guest', root + '/post',
+                            f'http://localhost:{server.server_port}/other'):
+                self.assertEqual(platforms.read_json(address, opener=opener), {'ok': True})
+            platforms.read_json(root + '/separate')
+            self.assertEqual(observed, ['', 'visitor=anonymous', '', ''])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def test_text_response_decodes_compression_and_rejects_invalid_body(self):
+        for encoding, body, expected in [
+                ('', b'\xef\xbb\xbfhello', 'hello'),
+                ('deflate', zlib.compress(b'hello'), 'hello'),
+                ('gzip', b'broken gzip', 'parse_failed'),
+                ('br', b'unsupported', 'encoding_unsupported')]:
+            response = io.BytesIO(body)
+            response.headers = {'Content-Encoding': encoding}
+            with self.subTest(encoding=encoding):
+                if expected == 'hello':
+                    self.assertEqual(platforms.response_text(response), expected)
+                else:
+                    with self.assertRaises(platforms.Failure) as caught:
+                        platforms.response_text(response)
+                    self.assertEqual(caught.exception.code, expected)
+
     def test_json_post_preserves_body_and_header_boundaries(self):
         observed = []
         class Handler(http.server.BaseHTTPRequestHandler):

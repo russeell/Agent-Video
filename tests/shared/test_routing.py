@@ -2,7 +2,9 @@
 import unittest
 from unittest.mock import patch
 from scripts import platforms
-from scripts.platforms import bilibili, douyin, tiktok, youtube
+from scripts.platforms import (bilibili, dailymotion, douyin, instagram, kuaishou,
+                              pornhub, reddit, ted, tiktok, twitch, twitter, vimeo, weibo,
+                              xiaohongshu, youtube)
 
 
 class RoutingTest(unittest.TestCase):
@@ -11,7 +13,21 @@ class RoutingTest(unittest.TestCase):
                   (youtube, 'https://www.youtube.com/shorts/abcdefghijk', None),
                   (tiktok, 'https://vm.tiktok.com/short/', None),
                   (douyin, 'https://v.douyin.com/short/', None),
-                  (douyin, 'https://www.iesdouyin.com/share/video/123/', None)]
+                  (douyin, 'https://www.iesdouyin.com/share/video/123/', None),
+                  (twitter, 'https://x.com/example/status/1234', None),
+                  (twitter, 'https://twitter.com/example/status/1234/video/2', None),
+                  (reddit, 'https://www.reddit.com/r/videos/comments/abc123/title/', None),
+                  (reddit, 'https://m.reddit.com/comments/abc123/', None),
+                  (instagram, 'https://www.instagram.com/reel/example/', None),
+                  (xiaohongshu, 'https://xhslink.com/example', None),
+                  (kuaishou, 'https://v.kuaishou.com/example', None),
+                  (kuaishou, 'https://v.m.chenzhongtech.com/fw/photo/example', None),
+                  (vimeo, 'https://player.vimeo.com/video/1234', None),
+                  (dailymotion, 'https://dai.ly/abc123', None),
+                  (ted, 'https://www.ted.com/talks/example', None),
+                  (twitch, 'https://clips.twitch.tv/example', None),
+                  (weibo, 'https://m.weibo.cn/status/1234', None),
+                  (pornhub, 'https://cn.pornhub.com/view_video.php?viewkey=ph1234', None)]
         with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('Routing must not access HTTP')) as network:
             for adapter, source, part in routes:
                 expected = {'source': {'url': source}}
@@ -25,6 +41,11 @@ class RoutingTest(unittest.TestCase):
                    ('https://example.test/page.html', 'unsupported_source'),
                    ('https://example.test/vod.m3u8', 'unsupported_source'),
                    ('https://youtube.com.evil.test/watch?v=abcdefghijk', 'unsupported_source'),
+                   ('https://www.facebook.com/watch/?v=1234', 'unsupported_source'),
+                   ('https://www.netflix.com/title/1234', 'unsupported_source'),
+                   ('https://channels.weixin.qq.com/', 'unsupported_source'),
+                   ('https://x.com.evil.test/example/status/1234', 'unsupported_source'),
+                   ('https://pornhub.com.evil.test/view_video.php?viewkey=ph1234', 'unsupported_source'),
                    ('https://v.qq.com/x/page/q326831cny0.html', 'unsupported_source'),
                    ('https://m.v.qq.com/x/page/q326831cny0.html', 'unsupported_source'),
                    ('ftp://www.youtube.com/watch?v=abcdefghijk', 'invalid_url'),

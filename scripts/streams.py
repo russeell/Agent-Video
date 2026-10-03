@@ -11,9 +11,9 @@ import tempfile
 from urllib.parse import urljoin
 
 if __package__:
-    from .platforms import Failure, download_file, media, request
+    from .platforms import Failure, download_file, media, request, response_text
 else:
-    from platforms import Failure, download_file, media, request
+    from platforms import Failure, download_file, media, request, response_text
 
 
 def _attrs(text):
@@ -24,10 +24,71 @@ def _value(attrs, key, default=''):
     return attrs.get(key, default).strip('"')
 
 
+def hls_formats(text, url, *, include_audio=True, headers=None):
+    """Expand a platform master into media and original/default audio playlists."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines or lines[0] != '#EXTM3U':
+        raise Failure('parse_failed', 'HLS response is not a playlist.')
+    if any(line.startswith(('#EXT-X-KEY:', '#EXT-X-SESSION-KEY:'))
+           and _value(_attrs(line.split(':', 1)[1]), 'METHOD') != 'NONE' for line in lines):
+        raise Failure('encrypted_stream_unsupported', 'Encrypted HLS is not supported.')
+    groups = {}
+    for line in lines:
+        if line.startswith('#EXT-X-MEDIA:'):
+            attrs = _attrs(line.split(':', 1)[1])
+            if _value(attrs, 'TYPE') == 'AUDIO' and _value(attrs, 'URI'):
+                groups.setdefault(_value(attrs, 'GROUP-ID'), []).append(attrs)
+    headers = headers or {}
+    formats = []
+    for index, line in enumerate(lines):
+        if not line.startswith('#EXT-X-STREAM-INF:'):
+            continue
+        attrs = _attrs(line.split(':', 1)[1])
+        if index + 1 >= len(lines) or lines[index + 1].startswith('#'):
+            raise Failure('parse_failed', 'HLS variant has no resource address.')
+        resolution = _value(attrs, 'RESOLUTION')
+        if not re.fullmatch(r'\d+x\d+', resolution):
+            continue
+        width, height = map(int, resolution.split('x'))
+        bandwidth = _value(attrs, 'BANDWIDTH', '0')
+        if not bandwidth.isdigit():
+            raise Failure('parse_failed', 'HLS variant has an invalid bandwidth.')
+        group = _value(attrs, 'AUDIO')
+        formats.append({'url': urljoin(url, lines[index + 1]), 'ext': 'm3u8', 'protocol': 'hls',
+                        'width': width, 'height': height, 'fps': media.frame_rate(_value(attrs, 'FRAME-RATE')),
+                        'bitrate': int(bandwidth), 'has_video': True,
+                        'has_audio': False if group in groups else None,
+                        'audio_group': group, 'headers': headers})
+    language = None
+    if include_audio and formats:
+        languages = set()
+        for group in dict.fromkeys(f['audio_group'] for f in formats):
+            renditions = groups.get(group, [])
+            native = [a for a in renditions if 'original' in _value(a, 'NAME').lower()]
+            if not native:
+                native = [a for a in renditions if _value(a, 'DEFAULT') == 'YES'
+                          and 'dubbed' not in _value(a, 'NAME').lower()]
+            if not native and len(renditions) == 1 and 'dubbed' not in _value(renditions[0], 'NAME').lower():
+                native = renditions
+            if renditions and len(native) != 1:
+                raise Failure('audio_ambiguous', 'HLS does not identify one original or default audio track.',
+                              'Provide a local video with the intended audio track.')
+            if native:
+                audio = native[0]
+                if 'original' in _value(audio, 'NAME').lower() and _value(audio, 'LANGUAGE'):
+                    languages.add(_value(audio, 'LANGUAGE'))
+                formats.append({'url': urljoin(url, _value(audio, 'URI')), 'ext': 'm3u8', 'protocol': 'hls',
+                                'has_video': False, 'has_audio': True, 'audio_group': group,
+                                'language': _value(audio, 'LANGUAGE') or None, 'headers': headers})
+        if len(languages) == 1:
+            language = languages.pop()
+    return formats, language
+
+
 def _fetch(url, cookies=None, headers=None):
     try:
         with request(url, cookies=cookies, headers=headers) as response:
-            return response.geturl(), response.read().decode('utf-8-sig', errors='replace')
+            return response.geturl(), response_text(response)
     except (OSError, http.client.HTTPException):
         raise Failure('network_failed', 'HTTP response could not be completely read.', 'Retry acquisition later.') from None
 
