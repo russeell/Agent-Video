@@ -14,14 +14,16 @@ Use search tools actually available in the host: platform search or site-scoped 
 | Bilibili | Host Bilibili search, including its public video-search API, or a site-scoped web search |
 | TikTok | Site-scoped web search for individual videos; try another available search provider if the first returns only topic or shop pages |
 | Douyin | Site-scoped web search for individual works; anonymous on-site search may require interactive verification even when individual videos are readable |
+| Instagram, X, Reddit, Xiaohongshu, Kuaishou, Weibo | Host platform search or site-scoped web search for individual video posts; public search visibility does not guarantee readable media |
+| Vimeo, Dailymotion, TED, Twitch, Pornhub | Host search or site-scoped web search for a single video, talk, clip or completed recording |
 
 Adapt topic keywords when useful, such as `外星人`, `aliens` or `UFO`. Keep queries and candidates small; avoid retrying a blocked search.
 
 ## Keep real video candidates
 
-Keep links that identify one video: YouTube watch / Shorts, Bilibili BV / av, TikTok `@user/video/ID`, or Douyin `video/ID` / `modal_id`. Resolve supported share links when necessary. Search pages, topics, shops, channels, profiles and photo posts are not single-video results.
+Keep links that identify one video: YouTube watch / Shorts, Bilibili BV / av, TikTok `@user/video/ID`, or Douyin `video/ID` / `modal_id`. Other adapters accept their platform’s single-work links: Instagram reels/posts, X statuses with attached video, native Reddit video posts, Xiaohongshu video notes, Kuaishou works, Weibo posts/TV, Vimeo and Dailymotion videos, TED talks, Twitch clips/completed VODs, and Pornhub viewkeys. Resolve supported share links when necessary. Search pages, topics, shops, channels, profiles and photo posts are not single-video results.
 
-Deduplicate by platform, work ID and selected Bilibili part. Remove irrelevant tracking parameters; do not guess repairs for malformed links. Keep candidate links and search titles.
+Deduplicate by platform, work ID and selected Bilibili part. Remove irrelevant tracking parameters, but retain access parameters such as Vimeo `h` and Xiaohongshu `xsec_token`; do not guess repairs for malformed links. Keep candidate links and search titles.
 
 ## Verify only what the user needs
 

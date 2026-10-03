@@ -61,7 +61,7 @@ Use `.claude` instead of `.agents` for Claude Code. Check existing links first. 
 
 ## Douyin
 
-Douyin requires **Google Chrome**, or **Chromium with its executable on `PATH`**. Agent Video starts the installed browser headlessly in a temporary, empty profile to obtain the work's data; it does not read your existing browser profile or cookies. Downloads and media processing use Agent Video's own code.
+Douyin and Instagram’s anonymous page-reading path require **Google Chrome**, or **Chromium with its executable on `PATH`**. Agent Video starts the installed browser headlessly in a temporary, empty profile to obtain the work's data; it does not read your existing browser profile or cookies. Downloads and media processing use Agent Video's own code.
 
 Chrome is detected in its normal macOS / Windows location, or `google-chrome`, `chromium` or `chromium-browser` on `PATH`. Interactive verification or login pages may still prevent access; these are not automated.
 

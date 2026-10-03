@@ -65,9 +65,18 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 | **YouTube** | Experimental: read captions and download public videos and Shorts; 1080p downloads tested |
 | **Bilibili** | Read available captions and download public videos, including a chosen part; 1080p downloads tested |
 | **TikTok** | Experimental: transcripts, downloads and screenshots tested on two public videos |
-| **Douyin** | Experimental: information, 1080p downloads with audio and screenshots tested on one public video; requires [Chrome or Chromium](INSTALL.md#douyin) |
+| **Douyin** | Experimental: information, 1080p downloads with audio and screenshots tested; requires [Chrome or Chromium](INSTALL.md#douyin) |
+| **Instagram** | Experimental: public Reel download with audio and screenshots tested; anonymous page reading may need [Chrome or Chromium](INSTALL.md#douyin) |
+| **X / Twitter** | Experimental: attached-video downloads, screenshots and reuse tested |
+| **Weibo** | Experimental: single posts and TV pages tested, including a 1080p download |
+| **Dailymotion** | Experimental: 1080p download with audio, screenshots and reuse tested |
+| **TED** | Native captions, download with audio, screenshots and reuse tested; some HLS variants are unsupported |
+| **Twitch** | Experimental: public clips tested at 1080p; completed-VOD information and stream discovery tested, full VOD download unverified |
+| **Pornhub** | Experimental: public-video information tested; media endpoints returned HTTP 410 or no resources, so full downloads remain unverified |
+| **Vimeo** | Information and captions tested; tested video streams were encrypted or access-restricted, so downloads remain unverified |
+| **Reddit, Xiaohongshu, Kuaishou** | Experimental parsers; public samples were blocked in this environment, so information and downloads remain unverified |
 
-Other websites, direct media links, live streams and DRM-protected videos are not supported. You can use a downloaded file as local input.
+Public links can still require authentication or verification. Netflix and WeChat Channels are not supported: Netflix uses protected playback, while the researched Channels tools depend on a WeChat client or authenticated session. Facebook, unknown websites, direct media links, live streams and DRM-protected videos are not supported. Downloaded files can be used as local input.
 
 Bilibili supporter-only videos require an account with access and an explicitly supplied Cookie file; a public video page does not guarantee public playback.
 
