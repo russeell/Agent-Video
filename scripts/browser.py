@@ -21,10 +21,20 @@ else:
 def browser_page(url, *, ready=None):
     # This is a platform helper, not a generic website fallback or a user session.
     parsed = urlsplit(url)
-    if (parsed.scheme not in ('http', 'https') or parsed.hostname != 'www.instagram.com'
-            or parsed.netloc != 'www.instagram.com'
-            or not re.fullmatch(r'/(?:p|reel|reels|tv)/[A-Za-z0-9_-]+/?', parsed.path)):
-        raise Failure('invalid_url', 'The anonymous page reader only accepts an Instagram work URL.')
+    instagram = (parsed.netloc == 'www.instagram.com' and
+                 re.fullmatch(r'/(?:p|reel|reels|tv)/[A-Za-z0-9_-]+/?', parsed.path))
+    ixigua = (parsed.netloc in ('www.ixigua.com', 'm.ixigua.com') and
+              re.fullmatch(r'/(?:video/)?\d{10,25}/?', parsed.path))
+    if parsed.scheme not in ('http', 'https') or not (instagram or ixigua):
+        raise Failure('invalid_url', 'The anonymous page reader requires a supported platform work URL.')
+    platform = 'Instagram' if instagram else 'Ixigua'
+    def accepts(address):
+        location = urlsplit(address)
+        if instagram:
+            return location.scheme in ('http', 'https') and location.netloc == 'www.instagram.com'
+        return (location.scheme in ('http', 'https') and location.netloc in ('www.ixigua.com', 'm.ixigua.com')
+                and re.fullmatch(r'/(?:video/)?\d{10,25}/?', location.path)
+                and location.path.rstrip('/').split('/')[-1] == parsed.path.rstrip('/').split('/')[-1])
     candidates = [shutil.which(name) for name in ('google-chrome', 'chromium', 'chromium-browser')]
     candidates.append('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
     for base in ('PROGRAMFILES', 'PROGRAMFILES(X86)', 'LOCALAPPDATA'):
@@ -32,7 +42,7 @@ def browser_page(url, *, ready=None):
             candidates.append(str(Path(os.environ[base]) / 'Google/Chrome/Application/chrome.exe'))
     browser = next((p for p in candidates if p and Path(p).is_file()), None)
     if not browser:
-        raise Failure('dependency_missing', 'Instagram page verification needs Chrome or Chromium.',
+        raise Failure('dependency_missing', platform + ' page verification needs Chrome or Chromium.',
                       'Install Chrome or Chromium, then retry this public video.')
     import websocket
     with tempfile.TemporaryDirectory(prefix='agent-video-page-', ignore_cleanup_errors=True) as temporary:
@@ -74,9 +84,9 @@ def browser_page(url, *, ready=None):
                     continue
                 params = message.get('params') or {}
                 if message.get('method') == 'Network.responseReceived' and params.get('type') == 'Document':
-                    response_host = urlsplit((params.get('response') or {}).get('url') or '').hostname
-                    if response_host != 'www.instagram.com':
-                        raise Failure('invalid_url', 'Instagram page redirected outside the platform.')
+                    response_url = (params.get('response') or {}).get('url') or ''
+                    if not accepts(response_url):
+                        raise Failure('invalid_url', platform + ' page redirected outside the requested work.')
                     documents.add(params['requestId'])
                 elif message.get('method') == 'Network.loadingFinished' and params.get('requestId') in documents:
                     # A blocked player can repeatedly retry media and keep its
@@ -100,13 +110,14 @@ def browser_page(url, *, ready=None):
                 if not isinstance(value, str):
                     continue
                 state = json.loads(value)
-                host = urlsplit(state.get('url') or '').hostname
-                if host and host != 'www.instagram.com':
-                    raise Failure('invalid_url', 'Instagram page redirected outside the platform.')
+                current = state.get('url') or ''
+                host = urlsplit(current).hostname
+                if host and not accepts(current):
+                    raise Failure('invalid_url', platform + ' page redirected outside the requested work.')
                 page = state.get('html') or ''
-                if host == 'www.instagram.com' and page and (ready(page) if ready else 'video_versions' in page):
+                if accepts(current) and page and (ready(page) if ready else 'video_versions' in page):
                     return page
-            raise Failure('experimental_access_limited', 'Instagram exposed no requested media in its anonymous browser context.',
+            raise Failure('experimental_access_limited', platform + ' exposed no requested media in its anonymous browser context.',
                           'The page may require login or verification; provide your own Cookie file or local media.')
         except (OSError, ValueError, StopIteration, websocket.WebSocketException):
             raise Failure('browser_failed', 'The isolated Chrome page-reading context failed.') from None

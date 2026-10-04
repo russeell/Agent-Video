@@ -2,9 +2,9 @@
 import unittest
 from unittest.mock import patch
 from scripts import platforms
-from scripts.platforms import (bilibili, dailymotion, douyin, instagram, kuaishou,
+from scripts.platforms import (bilibili, bluesky, cctv, dailymotion, douyin, googledrive, instagram, ixigua, kuaishou, linkedin, loom, missav, porn91,
                               pornhub, reddit, ted, tiktok, twitch, twitter, vimeo, weibo,
-                              wechat, xiaohongshu, youtube)
+                              wechat, xiaohongshu, youtube, streamable, zhihu)
 
 
 class RoutingTest(unittest.TestCase):
@@ -30,7 +30,21 @@ class RoutingTest(unittest.TestCase):
                   (wechat, 'https://weixin.qq.com/sph/PublicWork', None),
                   (wechat, 'https://channels.weixin.qq.com/finder-preview/pages/sph?id=PublicWork', None),
                   (wechat, 'https://channels.weixin.qq.com/finder-preview/pages/feed?token=public&eid=work', None),
-                  (pornhub, 'https://cn.pornhub.com/view_video.php?viewkey=ph1234', None)]
+                  (pornhub, 'https://cn.pornhub.com/view_video.php?viewkey=ph1234', None),
+                  (loom, 'https://www.loom.com/share/c43a642f815f4378b6f80a889bb73d8d', None),
+                  (googledrive, 'https://drive.google.com/file/d/PublicFile/view', None),
+                  (linkedin, 'https://www.linkedin.com/feed/update/urn:li:activity:7151241570371948544/', None),
+                  (streamable, 'https://streamable.com/moo', None),
+                  (bluesky, 'https://bsky.app/profile/bsky.app/post/3l3vgf77uco2g', None),
+                  (bluesky, 'https://www.bsky.app/profile/bsky.app/post/3l3vgf77uco2g', None),
+                  (bluesky, 'https://main.bsky.dev/profile/souris.moe/post/3l4qhp7bcs52c', None),
+                  (zhihu, 'https://www.zhihu.com/zvideo/1342930761977176064', None),
+                  (ixigua, 'https://www.ixigua.com/7313122846971167258', None),
+                  (ixigua, 'https://m.ixigua.com/video/7313122846971167258', None),
+                  (ixigua, 'https://v.ixigua.com/ShareWork/', None),
+                  (cctv, 'https://tv.cctv.com/2021/12/13/VIDEexample.shtml', None),
+                  (porn91, 'https://91porn.com/view_video.php?viewkey=abc123', None),
+                  (missav, 'https://missav.ws/en/abc-123', None)]
         with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('Routing must not access HTTP')) as network:
             for adapter, source, part in routes:
                 expected = {'source': {'url': source}}
@@ -49,6 +63,10 @@ class RoutingTest(unittest.TestCase):
                    ('https://weixin.qq.com.evil.test/sph/PublicWork', 'unsupported_source'),
                    ('https://x.com.evil.test/example/status/1234', 'unsupported_source'),
                    ('https://pornhub.com.evil.test/view_video.php?viewkey=ph1234', 'unsupported_source'),
+                   ('https://missav.ws.evil.test/en/abc-123', 'unsupported_source'),
+                   ('https://91porn.com.evil.test/view_video.php?viewkey=abc123', 'unsupported_source'),
+                   ('https://drive.google.com.evil.test/file/d/work/view', 'unsupported_source'),
+                   ('https://bsky.app.evil.test/profile/user/post/work', 'unsupported_source'),
                    ('https://v.qq.com/x/page/q326831cny0.html', 'unsupported_source'),
                    ('https://m.v.qq.com/x/page/q326831cny0.html', 'unsupported_source'),
                    ('ftp://www.youtube.com/watch?v=abcdefghijk', 'invalid_url'),

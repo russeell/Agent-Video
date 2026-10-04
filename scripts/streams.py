@@ -9,7 +9,7 @@ import math
 from pathlib import Path
 import re
 import tempfile
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
 if __package__:
     from .platforms import Failure, download_file, media, request, response_text
@@ -25,7 +25,17 @@ def _value(attrs, key, default=''):
     return attrs.get(key, default).strip('"')
 
 
-def hls_formats(text, url, *, include_audio=True, headers=None):
+def _resource_query(resource, parent, query):
+    """Preserve opt-in CDN query bytes, only within the playlist's origin."""
+    target, source = urlsplit(resource), urlsplit(parent)
+    if not query or (target.scheme, target.netloc.lower()) != (source.scheme, source.netloc.lower()):
+        return resource
+    keys = {unquote(pair.split('=', 1)[0]) for pair in target.query.split('&') if pair}
+    extra = [pair for pair in query.split('&') if pair and unquote(pair.split('=', 1)[0]) not in keys]
+    return urlunsplit(target._replace(query='&'.join(filter(None, [target.query, *extra]))))
+
+
+def hls_formats(text, url, *, include_audio=True, headers=None, segment_query=None):
     """Expand a platform master into media and original/default audio playlists."""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines or lines[0] != '#EXTM3U':
@@ -83,6 +93,12 @@ def hls_formats(text, url, *, include_audio=True, headers=None):
                                 'language': _value(audio, 'LANGUAGE') or None, 'headers': headers})
         if len(languages) == 1:
             language = languages.pop()
+    if segment_query:
+        for candidate in formats:
+            target, parent = urlsplit(candidate['url']), urlsplit(url)
+            if (target.scheme, target.netloc.lower()) == (parent.scheme, parent.netloc.lower()):
+                candidate['url'] = _resource_query(candidate['url'], url, segment_query)
+                candidate['segment_query'] = segment_query
     return formats, language
 
 
@@ -192,6 +208,7 @@ def download_hls(candidate, path, *, cookies=None):
         directory = Path(directory)
         joined = directory / ('joined.mp4' if parsed['init'] else 'joined.ts')
         addresses = ([parsed['init']] if parsed['init'] else []) + parsed['segments']
+        addresses = [_resource_query(address, candidate['url'], candidate.get('segment_query')) for address in addresses]
         with joined.open('wb') as output:
             for address in addresses:
                 fragment = download_file(address, directory / 'fragment', headers=candidate.get('headers'), cookies=cookies)

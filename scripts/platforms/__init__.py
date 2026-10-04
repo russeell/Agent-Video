@@ -195,7 +195,8 @@ def select_formats(formats, *, want_video=True, quality='auto', width=768):
         return (resolution,
                 f.get('fps') or 0, f.get('bitrate') or 0)
     if quality == 'source' or (quality == 'auto' and want_video != 'frames') or (want_video == 'frames' and width == 0):
-        selected = max(videos, key=rank)
+        originals = [f for f in videos if f.get('is_original') is True]
+        selected = max(originals or videos, key=rank)
     elif want_video == 'frames' and quality == 'auto':
         suitable = [f for f in videos if (f.get('width') or 0) >= width]
         selected = min(suitable, key=rank) if suitable else max(videos, key=rank)
@@ -340,5 +341,36 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if re.fullmatch(r'(?:(?:www|[a-z]{2})\.)?pornhub\.(?:com|net|org)', host):
         from . import pornhub
         return pornhub.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('loom.com', 'www.loom.com'):
+        from . import loom
+        return loom.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('drive.google.com', 'docs.google.com'):
+        from . import googledrive
+        return googledrive.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('linkedin.com', 'www.linkedin.com'):
+        from . import linkedin
+        return linkedin.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('streamable.com', 'www.streamable.com'):
+        from . import streamable
+        return streamable.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('bsky.app', 'www.bsky.app', 'main.bsky.dev'):
+        from . import bluesky
+        return bluesky.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('zhihu.com', 'www.zhihu.com'):
+        from . import zhihu
+        return zhihu.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('ixigua.com', 'www.ixigua.com', 'm.ixigua.com', 'v.ixigua.com',
+                'toutiao.com', 'www.toutiao.com', 'm.toutiao.com'):
+        from . import ixigua
+        return ixigua.resolve(url, part=part, cookies=cookies, need=need)
+    if any(host == site or host.endswith('.' + site) for site in ('cctv.com', 'cctv.cn', 'cntv.com', 'cntv.cn')):
+        from . import cctv
+        return cctv.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('91porn.com', 'www.91porn.com'):
+        from . import porn91
+        return porn91.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('missav.ws', 'www.missav.ws', 'missav.com', 'www.missav.com'):
+        from . import missav
+        return missav.resolve(url, part=part, cookies=cookies, need=need)
     raise Failure('unsupported_source', 'This website is not supported by Agent Video.',
                   'Use a supported platform video URL or a local media file.')

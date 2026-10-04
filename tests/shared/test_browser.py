@@ -9,15 +9,17 @@ from scripts.media import Failure
 
 
 class BrowserTests(unittest.TestCase):
-    def test_only_instagram_single_work_without_embedded_credentials(self):
+    def test_only_supported_single_work_without_embedded_credentials(self):
         for url in ('https://www.instagram.com.evil.test/p/ABC/', 'https://www.xiaohongshu.com/explore/ABC',
                     'https://www.instagram.com/accounts/login/', 'https://user:password@www.instagram.com/p/ABC/',
-                    'https://www.instagram.com:8443/p/ABC/', 'https://www.instagram.com:badport/p/ABC/'):
+                    'https://www.instagram.com:8443/p/ABC/', 'https://www.instagram.com:badport/p/ABC/',
+                    'https://www.ixigua.com/', 'https://user:pass@m.ixigua.com/video/7313122846971167258',
+                    'https://m.ixigua.com.evil.test/video/7313122846971167258'):
             with self.assertRaises(Failure) as caught:
                 browser.browser_page(url)
             self.assertEqual(caught.exception.code, 'invalid_url')
 
-    def _read(self, messages, ready=None):
+    def _read(self, messages, ready=None, url='https://www.instagram.com/reel/ABC/'):
         process = MagicMock(pid=123)
         process.poll.return_value = None
         socket = MagicMock()
@@ -34,7 +36,7 @@ class BrowserTests(unittest.TestCase):
                 patch.object(websocket, 'create_connection', return_value=socket) as connect, \
                 patch.object(browser.os, 'killpg', create=True) as kill:
             try:
-                result = browser.browser_page('https://www.instagram.com/reel/ABC/', ready=ready)
+                result = browser.browser_page(url, ready=ready)
             finally:
                 if browser.os.name == 'posix':
                     kill.assert_called_once_with(123, browser.signal.SIGKILL)
@@ -43,6 +45,20 @@ class BrowserTests(unittest.TestCase):
                 socket.close.assert_called_once()
                 process.wait.assert_called_once_with(timeout=3)
         return result, launch, connect, socket
+
+    def test_ixigua_accepts_mobile_redirect_only_to_requested_work(self):
+        source = 'https://www.ixigua.com/7313122846971167258'
+        for identifier, expected in [('7313122846971167258', None), ('6963187000321147400', 'invalid_url')]:
+            state = json.dumps({'url': 'https://m.ixigua.com/video/' + identifier + '?wid_try=1', 'html': '<html>_SSR_DATA</html>'})
+            message = json.dumps({'id': 4, 'result': {'result': {'value': state}}})
+            if expected:
+                with self.assertRaises(Failure) as caught:
+                    self._read([message], ready=lambda text: '_SSR_DATA' in text, url=source)
+                self.assertEqual(caught.exception.code, expected)
+            else:
+                result, launch, _, _ = self._read([message], ready=lambda text: '_SSR_DATA' in text, url=source)
+                self.assertIn('_SSR_DATA', result)
+                self.assertTrue(any(flag.startswith('--user-data-dir=') for flag in launch.call_args.args[0]))
 
     def test_anonymous_cdp_reads_complete_matching_dom_and_closes(self):
         state = json.dumps({'url': 'https://www.instagram.com/reel/ABC/', 'html': '<html>matching media</html>'})

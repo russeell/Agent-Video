@@ -6,6 +6,18 @@ from scripts import platforms
 
 
 class PlatformsTest(unittest.TestCase):
+    def test_native_original_without_dimensions_beats_known_transcode(self):
+        original = {'url': 'original', 'is_original': True, 'has_video': True, 'has_audio': None}
+        transcode = {'url': '720p', 'width': 1280, 'height': 720, 'has_video': True, 'has_audio': True}
+        for quality, want_video, width in [('source', True, 768), ('auto', True, 768), ('auto', 'frames', 0)]:
+            with self.subTest(quality=quality, want_video=want_video):
+                chosen = platforms.select_formats([transcode, original], quality=quality, want_video=want_video, width=width)
+                self.assertEqual(chosen[0]['url'], 'original')
+        self.assertEqual(platforms.select_formats([transcode, original], want_video='frames', width=768)[0]['url'], '720p')
+        # A label alone is not proof that this is the native original.
+        unverified = {**original, 'is_original': False, 'format_id': 'original'}
+        self.assertEqual(platforms.select_formats([transcode, unverified])[0]['url'], '720p')
+
     def test_resolution_labels_without_width_select_highest_available(self):
         formats = [{'url': f'https://example.test/{height}.mp4', 'height': height,
                     'has_video': True, 'has_audio': True} for height in (720, 2160, 1080)]

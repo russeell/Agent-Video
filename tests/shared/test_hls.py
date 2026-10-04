@@ -13,6 +13,23 @@ from scripts import streams
 
 
 class HLSTests(unittest.TestCase):
+    def test_opt_in_signed_query_preserves_bytes_and_origin_boundary(self):
+        query = 'token=a%2Fb%2Bz&expires=123&label=a+b'
+        parent = 'https://cdn.example.test/master.m3u8?' + query
+        child = streams._resource_query('https://cdn.example.test/video.m3u8?expires=456', parent, query)
+        self.assertEqual(child, 'https://cdn.example.test/video.m3u8?expires=456&token=a%2Fb%2Bz&label=a+b')
+        for foreign in ('https://other.example.test/video.m3u8', 'http://cdn.example.test/video.m3u8'):
+            self.assertEqual(streams._resource_query(foreign, parent, query), foreign)
+        master = '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="Original",URI="https://other.example.test/audio.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=10,RESOLUTION=1280x720,AUDIO="a"\nvideo.m3u8\n'
+        formats, _ = streams.hls_formats(master, parent, segment_query=query)
+        self.assertIn(query, formats[0]['url'])
+        self.assertEqual(formats[0]['segment_query'], query)
+        self.assertNotIn('segment_query', formats[1])
+        self.assertNotIn('token', formats[1]['url'])
+        # No implicit propagation for platforms that do not opt in.
+        ordinary, _ = streams.hls_formats(master, parent)
+        self.assertEqual(ordinary[0]['url'], 'https://cdn.example.test/video.m3u8')
+
     def test_master_pairs_audio_with_selected_video_quality(self):
         master = '''#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="low",NAME="English original",LANGUAGE="en",URI="audio-low.m3u8"
@@ -43,6 +60,14 @@ video-high.m3u8
         class Handler(http.server.SimpleHTTPRequestHandler):
             def do_GET(self):
                 observed.append((self.path, self.headers.get('Cookie', '')))
+                if self.path.startswith('/redirect.m3u8'):
+                    self.send_response(302)
+                    self.send_header('Location', f'http://localhost:{self.server.server_port}/vod.m3u8')
+                    self.end_headers()
+                    return
+                if self.path.startswith('/signed') and '?token=a%2Fb%2Bz&expires=123' not in self.path:
+                    self.send_error(403)
+                    return
                 super().do_GET()
             def log_message(self, *args):
                 pass
@@ -58,11 +83,27 @@ video-high.m3u8
                     '-i', directory / 'source.mp4', '-c:v', 'copy' if name == 'fragmented' else 'mpeg2video', '-g', '10', '-c:a', 'copy', '-hls_time', '1', '-hls_list_size', '0',
                     *extra, directory / (name + '.m3u8')])
             (directory / 'master.m3u8').write_text('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100000,RESOLUTION=160x90,FRAME-RATE=60\nvod.m3u8\n')
+            (directory / 'signed.m3u8').write_text((directory / 'vod.m3u8').read_text().replace('vod', 'signed'))
+            for segment in directory.glob('vod*.ts'):
+                shutil.copyfile(segment, directory / segment.name.replace('vod', 'signed'))
             server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), partial(Handler, directory=str(directory)))
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
                 root = f'http://127.0.0.1:{server.server_port}'
+                query = 'token=a%2Fb%2Bz&expires=123'
+                signed = streams.download_hls({'url': root + '/signed.m3u8?' + query, 'segment_query': query},
+                                               directory / 'downloads/signed.mkv')
+                signed_info = platforms.media.probe(signed)
+                self.assertTrue(signed_info['video'])
+                self.assertTrue(signed_info['audio'])
+                self.assertAlmostEqual(signed_info['duration'], 3, delta=.3)
+                self.assertTrue(all(path.endswith('?' + query) for path, _ in observed if path.startswith('/signed')))
+                before = len(observed)
+                redirected = streams.download_hls({'url': root + '/redirect.m3u8?' + query, 'segment_query': query},
+                                                  directory / 'downloads/redirected.mkv')
+                self.assertAlmostEqual(platforms.media.probe(redirected)['duration'], 3, delta=.3)
+                self.assertTrue(all('token=' not in path for path, _ in observed[before + 1:]))
                 cookie = directory / 'cookies.txt'
                 cookie.write_text('# Netscape HTTP Cookie File\n127.0.0.1\tFALSE\t/\tFALSE\t2147483647\tsession\tsecret\n')
                 cross = re.sub(r'(?m)^(vod\d+\.ts)$', f'http://localhost:{server.server_port}/\\1', (directory / 'vod.m3u8').read_text())

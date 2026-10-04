@@ -82,6 +82,16 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 | **Kuaishou** | Experimental: public works and share links tested, including 720p downloads with audio, screenshots and reuse |
 | **Xiaohongshu** | Experimental: tested notes redirected to unavailable or security pages; information and downloads remain unverified |
 | **WeChat Channels** | Experimental: public share-link information tested; playback-link and user-supplied Yuanbao Cookie paths implemented, downloads remain unverified ([setup](INSTALL.md#wechat-channels)) |
+| **Loom** | Experimental: public-share captions, download with audio, screenshots and reuse tested; some original files have audio decoding errors |
+| **Google Drive** | Experimental: public video-share downloads, screenshots and reuse tested; downloads use playable versions, original files and captions remain unverified |
+| **LinkedIn** | Experimental: public native post videos, captions, screenshots and reuse tested; excludes Learning, events and external video links |
+| **Streamable** | Experimental: single-video downloads with audio, screenshots and reuse tested |
+| **Bluesky** | Experimental: original 1080p video, available captions, screenshots and reuse tested; captions may cover only part of a video |
+| **Zhihu** | Experimental: zvideo downloads with audio, screenshots and reuse tested |
+| **Ixigua** | Experimental: 720p downloads with audio, screenshots and reuse tested; anonymous reading may need [Chrome or Chromium](INSTALL.md#douyin), share links remain unverified |
+| **CCTV** | Experimental: CCTV / CNTV VOD downloads with audio, screenshots and audio export tested; best exposed quality in the samples was 270p; excludes Yangshipin |
+| **91porn** | Experimental: work information tested; sample downloads were shorter than the stated works, so complete downloads remain unverified and incomplete files are rejected |
+| **MissAV** | Experimental: page and player parsing implemented; tested links encountered access verification, so information and downloads remain unverified |
 
 Public links can still require authentication or verification. Netflix, Facebook, unknown websites, direct media links, live streams and DRM-protected videos are not supported. Downloaded files can be used as local input.
 
