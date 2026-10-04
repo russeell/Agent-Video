@@ -72,9 +72,11 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 | **Dailymotion** | Experimental: 1080p download with audio, screenshots and reuse tested |
 | **TED** | Native captions, download with audio, screenshots and reuse tested; some HLS variants are unsupported |
 | **Twitch** | Experimental: public clips tested at 1080p; completed-VOD information and stream discovery tested, full VOD download unverified |
-| **Pornhub** | Experimental: public-video information tested; media endpoints returned HTTP 410 or no resources, so full downloads remain unverified |
+| **Pornhub** | Experimental: public MP4 download with audio and reuse tested; some HLS endpoints remain unavailable |
 | **Vimeo** | Information and captions tested; tested video streams were encrypted or access-restricted, so downloads remain unverified |
-| **Reddit, Xiaohongshu, Kuaishou** | Experimental parsers; public samples were blocked in this environment, so information and downloads remain unverified |
+| **Reddit** | Experimental: native-video downloads, screenshots and reuse tested, including videos without audio |
+| **Kuaishou** | Experimental: public works and share links tested, including 720p downloads with audio, screenshots and reuse |
+| **Xiaohongshu** | Experimental: tested notes redirected to unavailable or security pages; information and downloads remain unverified |
 
 Public links can still require authentication or verification. Netflix and WeChat Channels are not supported: Netflix uses protected playback, while the researched Channels tools depend on a WeChat client or authenticated session. Facebook, unknown websites, direct media links, live streams and DRM-protected videos are not supported. Downloaded files can be used as local input.
 
