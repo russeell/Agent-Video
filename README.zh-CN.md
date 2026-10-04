@@ -11,7 +11,7 @@
   <a href="README.md">English</a> · 简体中文 · <a href="INSTALL.md">安装</a> · <a href="UPDATE.md">更新</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
-给 Coding Agent 一个**主题、视频链接或本地文件**。让它帮你找视频、理解视频说了什么和展示了什么，或者保存你需要的文件。
+把视频链接或本地文件交给 **Codex、Claude Code 等 Coding Agent**。直接问视频讲了什么、画面里发生了什么，也可以提取带时间戳的文字稿、截取清晰画面，或保存音频和视频。
 
 ## 使用示例
 
@@ -19,19 +19,20 @@
 
 *基于已验证输出制作的演示动画，非原始会话录屏；获取材料的等待时间已省略。*
 
-用这段[七龙珠视频](https://www.bilibili.com/video/BV1X5411b7xA/)：解释抽样画面 → 查看 **01:48** → 保存 **1080p 有声视频**，复用已保存的材料。
+用这段[七龙珠视频](https://www.bilibili.com/video/BV1X5411b7xA/)：根据抽样画面解释发生了什么 → 查看 **01:48** 的清晰截图 → 保存 **1080p 有声视频**。后续追问复用已保存的材料。
 
 ## 你可以这样问
 
 ```text
-找一个有实际操作演示的 Blender 短教程。
 总结这个视频：<视频链接>
-这个视频在 <时间点> 展示了什么？截一张清晰的图给我看看。
 提取带时间戳的文字稿。
+这个视频在 <时间点> 展示了什么？截一张清晰的图给我看看。
+把这个视频的音频单独保存下来。
 下载这个视频，选能获取到的最高画质。
+找一个有实际操作演示的 Blender 短教程。
 ```
 
-Agent 使用[宿主已有搜索工具](SEARCH.md)寻找候选，Agent Video 按需获取选中视频的信息、文字稿、画面和音视频。你也可以直接要求下载视频。
+描述一个主题，Agent 会使用[已有搜索工具](SEARCH.md)帮你找视频。Agent Video 获取回答所需的材料，并保存下来供后续追问复用。你也可以直接要求保存音频或视频。
 
 ## 安装
 
@@ -93,6 +94,9 @@ B 站充电专属视频需要有观看权限的账号和显式提供的 Cookie �
 ```bash
 # 获取文字稿
 .venv/bin/agent-video "<视频链接或本地文件>" --get transcript
+
+# 单独保存音频
+.venv/bin/agent-video "<视频链接或本地文件>" --get audio
 
 # 使用已保存的 manifest 获取清晰截图
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 00:10 --width 0 --quality source
