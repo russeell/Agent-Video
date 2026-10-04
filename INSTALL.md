@@ -105,10 +105,14 @@ Defaults to CPU/int8; normal calls do not download models. Speech-to-text may co
 
 ## Verify
 
-Run `agent-video --help` and `agent-video --version` from the project environment, then read [SKILL.md](SKILL.md). With a supported URL or local video, request only the needed evidence:
+Run `agent-video --help` and `agent-video --version` from the project environment, then read [SKILL.md](SKILL.md). With an existing short local video, check basic media processing without depending on platform access, subtitles or an ASR model:
 
 ```bash
-.venv/bin/agent-video "<video-url-or-local-file>" --get transcript
+.venv/bin/agent-video "/path/to/local-video.mp4" --get frames --max-frames 1 --width 0
+# Use the manifest path returned above to check follow-up reuse and file delivery
+.venv/bin/agent-video --evidence "/path/to/manifest.json" --get video
 ```
 
-Check the returned files, not just the exit code. Captions need no model; without captions, ASR requires the optional setup above. A platform access failure is separate from installation. See [README.md](README.md) for current support and limits.
+Open the returned frame and video; check the picture, duration and expected audio. The source file must remain unchanged, and both calls should use the same manifest. If no local video is available, report that media processing has not yet been verified.
+
+Then try the user's task with a supported URL or local file. Captions need no model; without captions, ASR requires the optional setup above. Missing subtitles or a platform access failure does not mean installation failed. See [README.md](README.md) for current support and limits.

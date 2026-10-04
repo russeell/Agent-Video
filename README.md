@@ -113,7 +113,7 @@ See `--help` for time ranges, language, quality, video parts and Cookie files; `
 
 ## Contributing
 
-Found a broken link or confusing behavior? [Open an issue](https://github.com/russeell/Agent-Video/issues) with the video link, what you wanted to do and the error message. Leave out cookies and private download addresses.
+Found a broken link or confusing behavior? [Open an issue](https://github.com/russeell/Agent-Video/issues) with a public video link, what you wanted to do, your OS / agent, the `--version` output and the returned `status` / `diagnostics`. Leave out cookies, private links and signed download addresses.
 
 For code changes, install the project and FFmpeg, then run the tests:
 

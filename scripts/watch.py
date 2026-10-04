@@ -32,9 +32,11 @@ class Parser(argparse.ArgumentParser):
 
 def parser():
     p = Parser(description='Get video evidence and reuse it in follow-up questions.',
-               epilog='Examples:\n  agent-video video.mp4 --get transcript,frames\n'
+               epilog='Examples:\n  agent-video video.mp4 --get transcript\n'
                '  agent-video --evidence manifest.json --get frames --at 01:23 --width 1600\n'
-               '  agent-video --evidence manifest.json --get video',
+               '  agent-video "<video-url>" --get video\n\n'
+               'Returns JSON with manifest, artifacts and diagnostics.\n'
+               'Exit codes: 0 success, 2 partial success, 1 failure, 64 invalid arguments.',
                formatter_class=argparse.RawDescriptionHelpFormatter)
     try:
         current_version = version('agent-video')
@@ -42,21 +44,27 @@ def parser():
         project_file = Path(__file__).resolve().parents[1] / 'pyproject.toml'
         current_version = tomllib.loads(project_file.read_text(encoding='utf-8'))['project']['version']
     p.add_argument('--version', action='version', version='agent-video ' + current_version)
-    p.add_argument('source', nargs='?')
-    p.add_argument('--evidence')
-    p.add_argument('--get', default='transcript')
-    p.add_argument('--out')
-    p.add_argument('--start')
-    p.add_argument('--end')
-    p.add_argument('--at')
-    p.add_argument('--max-frames', type=int, default=12)
-    p.add_argument('--width', type=int, default=768)
+    p.add_argument('source', nargs='?', help='Supported video URL or local file; use this or --evidence.')
+    p.add_argument('--evidence', metavar='MANIFEST', help='Reuse a saved manifest.json instead of a new source.')
+    p.add_argument('--get', default='transcript', metavar='KINDS',
+                   help='Comma-separated info,transcript,frames,audio,video (default: %(default)s).')
+    p.add_argument('--out', metavar='DIRECTORY',
+                   help='Parent directory for new evidence (default: .agent-video); cannot combine with --evidence.')
+    p.add_argument('--start', metavar='TIME',
+                   help='Start in the original video: seconds, MM:SS or HH:MM:SS (default: 0).')
+    p.add_argument('--end', metavar='TIME', help='End in the same time formats, after --start (default: video end).')
+    p.add_argument('--at', metavar='TIMES',
+                   help='Comma-separated original-video times, e.g. 00:10,01:23; requires frames, excludes --start/--end.')
+    p.add_argument('--max-frames', type=int, default=12,
+                   help='Frame budget, including explicit --at times (default: %(default)s).')
+    p.add_argument('--width', type=int, default=768,
+                   help='Frame width in pixels, without upscaling; 0 keeps source size (default: %(default)s).')
     p.add_argument('--quality', choices=['auto', '1080p', 'source'], default='auto',
                    help='video defaults to highest available; 1080p limits the tier; frames auto uses the requested width')
-    p.add_argument('--language')
-    p.add_argument('--audio-track', type=int)
-    p.add_argument('--part', type=int)
-    p.add_argument('--cookies')
+    p.add_argument('--language', help='Requested subtitle or ASR language, e.g. en or zh; no automatic translation.')
+    p.add_argument('--audio-track', type=int, metavar='INDEX', help='Select a nonnegative ffprobe audio stream index.')
+    p.add_argument('--part', type=int, metavar='N', help='Bilibili part number, starting at 1; must agree with URL p=.')
+    p.add_argument('--cookies', metavar='FILE', help='Explicitly supplied Netscape Cookie file; no browser credential access.')
     return p
 
 

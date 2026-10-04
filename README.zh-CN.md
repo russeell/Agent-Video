@@ -113,7 +113,7 @@ B 站充电专属视频需要有观看权限的账号和显式提供的 Cookie �
 
 ## 参与贡献
 
-遇到无法读取的链接或不好用的地方，欢迎[提交 Issue](https://github.com/russeell/Agent-Video/issues)，附上视频链接、想做什么和报错信息。请勿附带 Cookie 或私有下载地址。
+遇到无法读取的链接或不好用的地方，欢迎[提交 Issue](https://github.com/russeell/Agent-Video/issues)，附上公开视频链接、想做什么、系统和 Agent、`--version` 输出，以及返回的 `status` / `diagnostics`。请勿附带 Cookie、私人链接或带签名的下载地址。
 
 修改代码后，安装项目和 FFmpeg，再运行测试：
 

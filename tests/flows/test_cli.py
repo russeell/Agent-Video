@@ -30,6 +30,12 @@ class ConsoleTests(unittest.TestCase):
         help_result = self.call('--help')
         self.assertEqual(help_result.returncode, 0, help_result.stderr)
         self.assertIn('--evidence', help_result.stdout)
+        # The README delegates these formats to --help; flag names alone are insufficient.
+        help_text = ' '.join(help_result.stdout.split())
+        for usage in ('MM:SS or HH:MM:SS', '0 keeps source size', 'Bilibili part number',
+                      'Netscape Cookie file', '2 partial success'):
+            with self.subTest(usage=usage):
+                self.assertIn(usage, help_text)
         invalid = self.call('--get', 'invalid')
         self.assertEqual(invalid.returncode, 64, invalid.stderr)
         result = json.loads(invalid.stdout)
