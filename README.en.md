@@ -11,7 +11,7 @@
   English · <a href="README.md">简体中文</a> · <a href="INSTALL.md">Install</a> · <a href="UPDATE.md">Update</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
-Give **Codex, Claude Code or another coding agent** a video link or local file. Ask what's said or shown, get a timestamped transcript, capture a clear screenshot, or save the audio and video you need.
+Let your AI agent **find videos, understand their content, extract transcripts, and save audio or video**. Start with a video link, a local file or a description of what you need.
 
 ## Example walkthrough
 
@@ -21,22 +21,25 @@ Give **Codex, Claude Code or another coding agent** a video link or local file. 
 
 With this [Dragon Ball clip](https://www.bilibili.com/video/BV1X5411b7xA/): explain what's happening from sampled frames → show a clear frame at **01:48** → save the **1080p video with audio**. Follow-ups reuse the saved materials.
 
-## What you can ask
+## What you can do
 
-```text
-Summarize this video: <video-url>
-Extract the transcript with timestamps.
-What does this video show at <timestamp>? Show me a clear frame.
-Save just the audio from this video.
-Download this video in the best available quality.
-Find a short Blender tutorial with an on-screen demonstration.
-```
+| What you need | Ask your agent |
+|---|---|
+| **Find videos** by topic and requirements | “Find a short Blender tutorial with an on-screen demonstration.” |
+| **Understand the content** from speech and visuals | “Summarize this video and explain the key points.” |
+| **Extract a transcript** with timestamps | “Extract what's said in this video, with timestamps.” |
+| **Inspect a moment** with a clear screenshot of UI, code or charts | “What does this video show at `<timestamp>`? Give me a clear screenshot.” |
+| **Save audio** as a separate file | “Save just the audio from this video.” |
+| **Download video** in the best available quality, or save a selected clip | “Download this video in the best available quality.” |
+| **Ask follow-ups** using the same saved materials | “Using that transcript, explain the second point.” |
 
-Describe a topic to find videos using your agent's [available search tools](SEARCH.md). Agent Video gets the materials your agent needs to answer you and saves them for follow-ups. You can also request audio or video files directly.
+Finding videos uses your agent's [available search tools](SEARCH.md), with checks based on your requirements. Content claims are based on text or frames your agent has actually read.
+
+Need only a file? Request it directly. Materials are saved and reused for follow-ups, extra screenshots and file delivery.
 
 ## Install
 
-Works with **Codex, Claude Code**, and other coding agents that support Skills. Copy this message to your agent:
+Use it with an AI agent that can run commands and read text and images. Register the Skill if your host supports it, or use the CLI directly. Copy this message to your agent:
 
 ```text
 Install Agent Video by following this guide:
