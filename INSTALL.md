@@ -115,4 +115,4 @@ Run `agent-video --help` and `agent-video --version` from the project environmen
 
 Open the returned frame and video; check the picture, duration and expected audio. The source file must remain unchanged, and both calls should use the same manifest. If no local video is available, report that media processing has not yet been verified.
 
-Then try the user's task with a supported URL or local file. Captions need no model; without captions, ASR requires the optional setup above. Missing subtitles or a platform access failure does not mean installation failed. See [README.md](README.md) for current support and limits.
+Then try the user's task with a supported URL or local file. Captions need no model; without captions, ASR requires the optional setup above. Missing subtitles or a platform access failure does not mean installation failed. See [README.en.md](README.en.md) for current support and limits.

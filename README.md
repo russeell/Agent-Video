@@ -2,127 +2,127 @@
 <p align="center"><strong>Let your agent find and watch videos.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/russeell/Agent-Video/actions/workflows/test.yml"><img src="https://github.com/russeell/Agent-Video/actions/workflows/test.yml/badge.svg?branch=main" alt="Tests"></a>
+  <a href="https://github.com/russeell/Agent-Video/actions/workflows/test.yml"><img src="https://github.com/russeell/Agent-Video/actions/workflows/test.yml/badge.svg?branch=main" alt="测试"></a>
   <a href="INSTALL.md"><img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11+"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="MIT 许可证"></a>
 </p>
 
 <p align="center">
-  English · <a href="README.zh-CN.md">简体中文</a> · <a href="INSTALL.md">Install</a> · <a href="UPDATE.md">Update</a> · <a href="SKILL.md">Agent Skill</a>
+  简体中文 · <a href="README.en.md">English</a> · <a href="INSTALL.md">安装</a> · <a href="UPDATE.md">更新</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
-Give **Codex, Claude Code or another coding agent** a video link or local file. Ask what's said or shown, get a timestamped transcript, capture a clear screenshot, or save the audio and video you need.
+把视频链接或本地文件交给 **Codex、Claude Code 等 Coding Agent**。直接问视频讲了什么、画面里发生了什么，也可以提取带时间戳的文字稿、截取清晰画面，或保存音频和视频。
 
-## Example walkthrough
+## 使用示例
 
-![Agent Video demo: understand a Dragon Ball clip, inspect 01:48, and save the video](assets/demo.gif)
+![Agent Video 演示：理解七龙珠片段、查看 01:48 画面、保存视频](assets/demo.gif)
 
-*Animation made from verified outputs, not a raw session recording. Material acquisition waits are omitted.*
+*基于已验证输出制作的演示动画，非原始会话录屏；获取材料的等待时间已省略。*
 
-With this [Dragon Ball clip](https://www.bilibili.com/video/BV1X5411b7xA/): explain what's happening from sampled frames → show a clear frame at **01:48** → save the **1080p video with audio**. Follow-ups reuse the saved materials.
+用这段[七龙珠视频](https://www.bilibili.com/video/BV1X5411b7xA/)：根据抽样画面解释发生了什么 → 查看 **01:48** 的清晰截图 → 保存 **1080p 有声视频**。后续追问复用已保存的材料。
 
-## What you can ask
+## 你可以这样问
 
 ```text
-Summarize this video: <video-url>
-Extract the transcript with timestamps.
-What does this video show at <timestamp>? Show me a clear frame.
-Save just the audio from this video.
-Download this video in the best available quality.
-Find a short Blender tutorial with an on-screen demonstration.
+总结这个视频：<视频链接>
+提取带时间戳的文字稿。
+这个视频在 <时间点> 展示了什么？截一张清晰的图给我看看。
+把这个视频的音频单独保存下来。
+下载这个视频，选能获取到的最高画质。
+找一个有实际操作演示的 Blender 短教程。
 ```
 
-Describe a topic to find videos using your agent's [available search tools](SEARCH.md). Agent Video gets the materials your agent needs to answer you and saves them for follow-ups. You can also request audio or video files directly.
+描述一个主题，Agent 会使用[已有搜索工具](SEARCH.md)帮你找视频。Agent Video 获取回答所需的材料，并保存下来供后续追问复用。你也可以直接要求保存音频或视频。
 
-## Install
+## 安装
 
-Works with **Codex, Claude Code**, and other coding agents that support Skills. Copy this message to your agent:
+适用于 **Codex、Claude Code** 等支持 Skill 的 Coding Agent。把下面这段话复制给 Agent：
 
 ```text
-Install Agent Video by following this guide:
+帮我按照这份指南安装 Agent Video：
 https://raw.githubusercontent.com/russeell/Agent-Video/main/INSTALL.md
 ```
 
-Requires **Python 3.11+** and **FFmpeg**. The [installation guide](INSTALL.md) covers setup, Windows and optional speech-to-text.
+需要 **Python 3.11+** 和 **FFmpeg**。[安装指南](INSTALL.md) 包含首次安装、Windows 和可选语音转文字的步骤。
 
-## Update
+## 更新
 
-Copy this message to your agent:
+把下面这段话复制给 Agent：
 
 ```text
-Update my existing Agent Video installation by following this guide:
+帮我按照这份指南更新已安装的 Agent Video：
 https://raw.githubusercontent.com/russeell/Agent-Video/main/UPDATE.md
 ```
 
-The [update guide](UPDATE.md) preserves your existing setup and saved files.
+[更新指南](UPDATE.md)会保留现有环境和已保存的文件。
 
-## Supported sources
+## 支持哪些视频
 
-**v0.1 is an early release.** Support varies by platform and video; some links may still fail.
+**v0.1 是早期版本。** 各平台的支持情况如下，部分链接仍可能无法获取。
 
-| Source | What works today |
+| 来源 | 目前能做什么 |
 |---|---|
-| **Local files** | Read subtitles, take screenshots, and export audio, video or a selected clip |
-| **YouTube** | Experimental: read captions and download public videos and Shorts; 1080p downloads tested |
-| **Bilibili** | Read available captions and download public videos, including a chosen part; 1080p downloads tested |
-| **TikTok** | Experimental: transcripts, downloads and screenshots tested on two public videos |
-| **Douyin** | Experimental: information, 1080p downloads with audio and screenshots tested; requires [Chrome or Chromium](INSTALL.md#douyin) |
-| **Instagram** | Experimental: public Reel download with audio and screenshots tested; anonymous page reading may need [Chrome or Chromium](INSTALL.md#douyin) |
-| **X / Twitter** | Experimental: attached-video downloads, screenshots and reuse tested |
-| **Weibo** | Experimental: single posts and TV pages tested, including a 1080p download |
-| **Dailymotion** | Experimental: 1080p download with audio, screenshots and reuse tested |
-| **TED** | Native captions, download with audio, screenshots and reuse tested; some HLS variants are unsupported |
-| **Twitch** | Experimental: public clips tested at 1080p; completed-VOD information and stream discovery tested, full VOD download unverified |
-| **Pornhub** | Experimental: public MP4 download with audio and reuse tested; some HLS endpoints remain unavailable |
-| **Vimeo** | Information and captions tested; tested video streams were encrypted or access-restricted, so downloads remain unverified |
-| **Reddit** | Experimental: native-video downloads, screenshots and reuse tested, including videos without audio |
-| **Kuaishou** | Experimental: public works and share links tested, including 720p downloads with audio, screenshots and reuse |
-| **Xiaohongshu** | Experimental: tested notes redirected to unavailable or security pages; information and downloads remain unverified |
-| **WeChat Channels** | Experimental: public share-link information tested; playback-link and user-supplied Yuanbao Cookie paths implemented, downloads remain unverified ([setup](INSTALL.md#wechat-channels)) |
+| **本地文件** | 读取字幕、截图、导出音视频，也可以只处理指定片段 |
+| **YouTube** | 实验支持：读取字幕，下载公开视频和 Shorts；已验证 1080p 下载 |
+| **Bilibili** | 读取可用字幕，下载公开视频，也可以指定分 P；已验证 1080p 下载 |
+| **TikTok** | 实验支持：已用两个公开视频验证文字稿、下载和截图 |
+| **抖音** | 实验支持：已验证信息、1080p 有声下载和截图；需要 [Chrome 或 Chromium](INSTALL.md#douyin) |
+| **Instagram** | 实验支持：已验证公开 Reel 的有声下载和截图；匿名读取页面可能需要 [Chrome 或 Chromium](INSTALL.md#douyin) |
+| **X / Twitter** | 实验支持：已验证帖子视频下载、截图和复用 |
+| **微博** | 实验支持：已验证普通帖子和视频页，包括 1080p 下载 |
+| **Dailymotion** | 实验支持：已验证 1080p 有声下载、截图和复用 |
+| **TED** | 已验证原生字幕、有声下载、截图和复用；部分 HLS 版本暂不支持 |
+| **Twitch** | 实验支持：已验证公开片段的 1080p 下载；录像信息和媒体地址已核对，完整录像下载未验证 |
+| **Pornhub** | 实验支持：已验证公开 MP4 的有声下载和复用；部分 HLS 接口仍不可用 |
+| **Vimeo** | 已验证信息和字幕；测试视频流加密或限制访问，下载仍未验证 |
+| **Reddit** | 实验支持：已验证站内视频下载、截图和复用，包括无音轨视频 |
+| **快手** | 实验支持：已验证公开作品和分享链接，包括 720p 有声下载、截图和复用 |
+| **小红书** | 实验支持：测试笔记跳转到暂不可浏览或安全验证页，信息和下载仍未验证 |
+| **微信视频号** | 实验支持：已验证公开分享链接的信息获取；已实现播放链接和用户提供的元宝 Cookie 路径，下载仍未实测通过（[配置](INSTALL.md#wechat-channels)） |
 
-Public links can still require authentication or verification. Netflix, Facebook, unknown websites, direct media links, live streams and DRM-protected videos are not supported. Downloaded files can be used as local input.
+公开链接仍可能需要登录或验证。暂不支持 Netflix、Facebook、未知网站、媒体直链、直播和 DRM 加密视频。已经下载的视频可以作为本地文件使用。
 
-Bilibili supporter-only videos require an account with access and an explicitly supplied Cookie file; a public video page does not guarantee public playback.
+B 站充电专属视频需要有观看权限的账号和显式提供的 Cookie 文件；能打开作品页面不代表能匿名播放。
 
-Subtitles are used first. If none are available, optional speech-to-text can transcribe the audio. Transcripts may contain errors or cover only part of a video; screenshots show selected moments.
+优先读取字幕，没有字幕时可配置语音转文字。文字稿可能有错字，也可能没有覆盖全片；截图只展示选取的时刻。
 
 <details>
-<summary><strong>Use the command line</strong></summary>
+<summary><strong>命令行用法</strong></summary>
 
-After installation, run from the project directory:
+安装后，在项目目录运行：
 
 ```bash
-# Get a transcript
-.venv/bin/agent-video "<video-url-or-local-file>" --get transcript
+# 获取文字稿
+.venv/bin/agent-video "<视频链接或本地文件>" --get transcript
 
-# Save the audio
-.venv/bin/agent-video "<video-url-or-local-file>" --get audio
+# 单独保存音频
+.venv/bin/agent-video "<视频链接或本地文件>" --get audio
 
-# Get a clear screenshot using the saved manifest
+# 使用已保存的 manifest 获取清晰截图
 .venv/bin/agent-video --evidence "/path/to/manifest.json" --get frames --at 00:10 --width 0 --quality source
 
-# Download a video directly
+# 直接下载视频
 .venv/bin/agent-video "<video-url>" --get video
 ```
 
-Choose a time within the video's duration for `--at`. `--get` accepts `info,transcript,frames,audio,video`, separately or together. Files are saved in `.agent-video/` by default. The command returns JSON with file paths and a `manifest.json`; use `--evidence` to reuse its materials for follow-ups or downloads. Exit code `2` means partial success; completed files remain usable.
+`--at` 应选择视频时长内的时刻。`--get` 支持 `info,transcript,frames,audio,video`，可以单独获取，也可以组合。文件默认保存在 `.agent-video/`。命令返回 JSON，其中有文件路径和 `manifest.json`；追问或下载时用 `--evidence` 复用已有材料。退出码 `2` 表示部分成功，已完成的文件仍可使用。
 
-See `--help` for time ranges, language, quality, video parts and Cookie files; `--version` shows the installed version. Windows uses `.venv\Scripts\agent-video.exe`.
+时间范围、语言、画质、分 P 和 Cookie 文件等参数见 `--help`；`--version` 显示安装版本。Windows 使用 `.venv\Scripts\agent-video.exe`。
 
 </details>
 
-## Contributing
+## 参与贡献
 
-Found a broken link or confusing behavior? [Open an issue](https://github.com/russeell/Agent-Video/issues) with a public video link, what you wanted to do, your OS / agent, the `--version` output and the returned `status` / `diagnostics`. Leave out cookies, private links and signed download addresses.
+遇到无法读取的链接或不好用的地方，欢迎[提交 Issue](https://github.com/russeell/Agent-Video/issues)，附上公开视频链接、想做什么、系统和 Agent、`--version` 输出，以及返回的 `status` / `diagnostics`。请勿附带 Cookie、私人链接或带签名的下载地址。
 
-For code changes, install the project and FFmpeg, then run the tests:
+修改代码后，安装项目和 FFmpeg，再运行测试：
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-These tests run offline. Check real downloads or speech-to-text separately when changing those features.
+这些测试离线运行。修改下载或语音转文字功能时，还需要单独检查实际效果。
 
-## License
+## 许可证
 
-[MIT](LICENSE).
+[MIT](LICENSE)。

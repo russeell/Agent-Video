@@ -25,4 +25,4 @@ asr = ["faster-whisper>=1.2,<2", "av<19"]
 packages = ["scripts", "scripts.platforms"]
 
 [tool.setuptools.data-files]
-"share/agent-video" = ["README.md", "README.zh-CN.md", "INSTALL.md", "UPDATE.md", "SEARCH.md", "SKILL.md", "LICENSE"]
+"share/agent-video" = ["README.md", "README.en.md", "README.zh-CN.md", "INSTALL.md", "UPDATE.md", "SEARCH.md", "SKILL.md", "LICENSE"]
