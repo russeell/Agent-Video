@@ -9,7 +9,7 @@ import html
 import json
 import re
 from urllib.parse import parse_qs, urlencode, urlsplit
-from . import Failure, diagnostic, read_json, read_text
+from . import Failure, diagnostic, read_json, read_text, _opener
 
 
 def _identity(url):
@@ -50,7 +50,7 @@ def _flashvars(text, identifier):
                   'Protected pages and JavaScript-only player assignments are unsupported.')
 
 
-def _formats(definitions, *, cookies=None, headers=None, include_audio=True):
+def _formats(definitions, *, cookies=None, headers=None, include_audio=True, opener=None):
     if __package__ == 'scripts.platforms':
         from ..streams import _fetch, hls_formats
     else:
@@ -67,12 +67,12 @@ def _formats(definitions, *, cookies=None, headers=None, include_audio=True):
             if not re.fullmatch(r'(?:(?:www|[a-z]{2})\.)?pornhub\.(?:com|net|org)', urlsplit(address).hostname or ''):
                 continue
             try:
-                resources = read_json(address, headers=headers, cookies=cookies)
+                resources = read_json(address, headers=headers, cookies=cookies, opener=opener)
                 if not isinstance(resources, list):
                     raise Failure('parse_failed', 'The native MP4 endpoint returned no resource list.')
                 nested, errors = _formats([e for e in resources if isinstance(e, dict)
                     and urlsplit(str(e.get('videoUrl') or '')).path != '/video/get_media'],
-                    cookies=cookies, headers=headers, include_audio=include_audio)
+                    cookies=cookies, headers=headers, include_audio=include_audio, opener=opener)
                 formats.extend(nested)
                 diagnostics.extend(errors)
             except Failure as exc:
@@ -99,7 +99,10 @@ def resolve(url, *, part=None, cookies=None, need=None):
     identifier, host = _identity(url)
     canonical = 'https://' + host + '/view_video.php?' + urlencode({'viewkey': identifier})
     headers = {'Origin': 'https://' + host, 'Referer': 'https://' + host + '/'}
-    text = read_text(canonical, cookies=cookies, headers=headers)
+    # Native MP4 metadata requires the anonymous session cookies set by this
+    # exact page request. A new cookie jar returns HTTP 200 with an empty list.
+    opener = _opener(cookies)
+    text = read_text(canonical, cookies=cookies, headers=headers, opener=opener)
     data = _flashvars(text, identifier)
     if any(str(data.get(key)).lower() in ('true', '1') for key in ('video_unavailable', 'video_unavailable_country')):
         raise Failure('access_denied', 'The native player marks this work as unavailable.')
@@ -122,7 +125,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
             result['diagnostics'].append(diagnostic('transcript', Failure('subtitle_absent', 'The native player exposes no caption file.', 'Use local ASR.')))
     if needs.intersection(('video', 'audio', 'frames', 'media')):
         formats, errors = _formats(
-            data.get('mediaDefinitions') or [], cookies=cookies, headers=headers,
+            data.get('mediaDefinitions') or [], cookies=cookies, headers=headers, opener=opener,
             include_audio=bool(needs.intersection(('video', 'audio', 'transcript'))) or 'frames' not in needs)
         result['formats'] = formats
         result['diagnostics'].extend(errors)

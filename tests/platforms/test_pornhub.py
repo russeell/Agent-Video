@@ -54,6 +54,14 @@ class PornhubTests(unittest.TestCase):
         self.assertIsNone(result['metadata']['audio_expected'])
         self.assertEqual(chosen['headers']['Origin'], 'https://cn.pornhub.com')
 
+    def test_mp4_metadata_reuses_page_session(self):
+        data = {'mediaDefinitions': [{'format': 'mp4', 'videoUrl': 'https://cn.pornhub.com/video/get_media?id=42'}]}
+        session = object()
+        with patch.object(pornhub, '_opener', return_value=session), patch.object(pornhub, 'read_text', return_value=page(data)) as read, patch.object(pornhub, 'read_json', return_value=[]) as metadata:
+            pornhub.resolve('https://cn.pornhub.com/embed/phabc123', need=['video'])
+        self.assertIs(read.call_args.kwargs['opener'], session)
+        self.assertIs(metadata.call_args.kwargs['opener'], session)
+
     def test_access_failure_preserves_info_and_expected_headers(self):
         data = {'video_duration': 10, 'mediaDefinitions': [{'format': 'hls', 'videoUrl': 'https://cdn.test/master.m3u8'}]}
         with patch.object(pornhub, 'read_text', return_value=page(data)), patch('scripts.streams._fetch', side_effect=platforms.Failure('access_denied', 'HTTP 412')) as fetch:

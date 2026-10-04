@@ -55,8 +55,8 @@ def resolve(url, *, part=None, cookies=None, need=None):
             result['diagnostics'].append(diagnostic('media', Failure('encrypted_stream_unsupported', 'Vimeo exposes DRM-protected HLS; encrypted streams are unsupported.')))
             address = None
         if address:
-            # Vimeo's non-separate manifest is the same authorized muxed rendition.
-            address = address.replace('/sep/video/', '/video/')
+            # Preserve the API's signed URL. Separate HLS audio groups are
+            # supported by the shared parser and must stay paired with video.
             try:
                 if __package__ == 'scripts.platforms':
                     from ..streams import _fetch, hls_formats

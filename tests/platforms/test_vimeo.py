@@ -59,3 +59,10 @@ class VimeoTests(unittest.TestCase):
         with self.assertRaises(Failure) as error:
             select_formats(result['formats'], want_video=False)
         self.assertEqual(error.exception.code, 'no_audio')
+
+    def test_signed_separate_hls_url_is_not_rewritten(self):
+        address = 'https://cdn.test/signed/sep/video/master.m3u8?sig=original'
+        config = {'video': {'id': 42}, 'request': {'files': {'hls': {'cdns': {'default': {'url': address}}}}}}
+        with patch.object(vimeo, 'read_json', return_value=config), patch('scripts.streams._fetch', return_value=(address, '#EXTM3U')) as fetch, patch('scripts.streams.hls_formats', return_value=([], None)):
+            vimeo.resolve('https://vimeo.com/42', need=['video'])
+        self.assertEqual(fetch.call_args.args[0], address)
