@@ -25,7 +25,7 @@ class XiaohongshuTests(unittest.TestCase):
                 'video': {'media': {'stream': streams}}}
         page = '<script>window.__INITIAL_STATE__=' + json.dumps({'note': {'noteDetailMap': {
             self.identifier: {'note': item}}}}) + '</script>'
-        with patch.object(xiaohongshu, 'read_text', return_value=page):
+        with patch.object(xiaohongshu, '_read_page', return_value=page):
             info = xiaohongshu.resolve('https://www.xiaohongshu.com/explore/' + self.identifier, need=['info'])
             result = xiaohongshu.resolve('https://www.xiaohongshu.com/explore/' + self.identifier, need=['video'])
         self.assertEqual(info['formats'], [])
@@ -48,4 +48,12 @@ class XiaohongshuTests(unittest.TestCase):
                            ({'noteId': self.identifier, 'type': 'normal'}, 'unsupported_content')]:
             with self.assertRaises(Failure) as caught:
                 xiaohongshu._note(page(item), self.identifier)
+            self.assertEqual(caught.exception.code, code)
+
+    def test_unavailable_and_security_redirect_are_not_empty_data_parse_errors(self):
+        for url, code in [('https://www.xiaohongshu.com/404?error_code=300031', 'platform_unavailable'),
+                          ('https://www.xiaohongshu.com/404/sec_example?redirectPath=%2Fexplore%2Fexample', 'access_denied'),
+                          ('https://example.test/explore/123', 'invalid_url')]:
+            with self.assertRaises(Failure) as caught:
+                xiaohongshu._check_response_url(url)
             self.assertEqual(caught.exception.code, code)

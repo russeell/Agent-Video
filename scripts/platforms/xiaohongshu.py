@@ -6,7 +6,26 @@ from datetime import datetime, timezone
 import json
 import re
 from urllib.parse import parse_qs, urlencode, urlsplit
-from . import Failure, diagnostic, read_text, request
+from . import Failure, diagnostic, response_text, request
+
+
+def _check_response_url(url):
+    parsed = urlsplit(url)
+    if parsed.hostname not in ('xiaohongshu.com', 'www.xiaohongshu.com'):
+        raise Failure('invalid_url', 'Xiaohongshu link redirected outside the platform.')
+    code = parse_qs(parsed.query).get('error_code', [''])[0]
+    if parsed.path == '/404' and code == '300031':
+        raise Failure('platform_unavailable', 'Xiaohongshu redirected to its unavailable-note page (code 300031: 当前笔记暂时无法浏览).',
+                      'The server exposed no note data; try another complete public share link or your own Cookie file.')
+    if parsed.path.startswith('/404/sec_'):
+        raise Failure('access_denied', 'Xiaohongshu redirected to its security verification page.',
+                      'Interactive verification is unsupported; provide your own Cookie file or a local media file.')
+
+
+def _read_page(url, cookies=None):
+    with request(url, cookies=cookies) as response:
+        _check_response_url(response.geturl())
+        return response_text(response)
 
 
 def _identifier(url, cookies=None):
@@ -14,6 +33,7 @@ def _identifier(url, cookies=None):
     if parsed.hostname == 'xhslink.com' or parsed.hostname == 'www.xhslink.com':
         with request(url, cookies=cookies) as response:
             url = response.geturl()
+        _check_response_url(url)
         parsed = urlsplit(url)
     if parsed.hostname not in ('xiaohongshu.com', 'www.xiaohongshu.com'):
         raise Failure('invalid_url', 'Xiaohongshu link redirected outside the platform.')
@@ -80,7 +100,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if part is not None:
         raise Failure('invalid_part', '--part only applies to Bilibili.')
     identifier, canonical = _identifier(url, cookies)
-    item = _note(read_text(canonical, cookies=cookies), identifier)
+    item = _note(_read_page(canonical, cookies=cookies), identifier)
     video = item.get('video') or {}
     available = _formats(video, canonical)
     streams = ((video.get('media') or {}).get('stream') or {})
