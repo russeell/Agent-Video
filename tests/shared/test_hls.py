@@ -82,6 +82,15 @@ video-high.m3u8
                 platforms.media.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
                     '-i', directory / 'source.mp4', '-c:v', 'copy' if name == 'fragmented' else 'mpeg2video', '-g', '10', '-c:a', 'copy', '-hls_time', '1', '-hls_list_size', '0',
                     *extra, directory / (name + '.m3u8')])
+            # YouTube original audio uses packed ADTS AAC with an ID3 timestamp,
+            # without EXT-X-MAP. Absence of a map does not imply MPEG-TS.
+            platforms.media.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
+                '-i', directory / 'source.mp4', '-vn', '-c:a', 'copy', '-f', 'adts', directory / 'packed.aac'])
+            packed = directory / 'packed.aac'
+            payload = b'com.apple.streaming.transportStreamTimestamp\0' + bytes(8)
+            frame = b'PRIV' + len(payload).to_bytes(4, 'big') + bytes(2) + payload
+            packed.write_bytes(b'ID3\x03\0\0' + len(frame).to_bytes(4, 'big') + frame + packed.read_bytes())
+            (directory / 'packed.m3u8').write_text('#EXTM3U\n#EXTINF:3,\npacked.aac\n#EXT-X-ENDLIST\n')
             (directory / 'master.m3u8').write_text('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100000,RESOLUTION=160x90,FRAME-RATE=60\nvod.m3u8\n')
             (directory / 'signed.m3u8').write_text((directory / 'vod.m3u8').read_text().replace('vod', 'signed'))
             for segment in directory.glob('vod*.ts'):
@@ -91,6 +100,13 @@ video-high.m3u8
             thread.start()
             try:
                 root = f'http://127.0.0.1:{server.server_port}'
+                audio = streams.download_hls({'url': root + '/packed.m3u8'}, directory / 'downloads/audio.mkv')
+                audio_info = platforms.media.probe(audio)
+                self.assertFalse(audio_info['video'])
+                self.assertEqual(audio_info['audio'][0]['codec_name'], 'aac')
+                self.assertAlmostEqual(audio_info['duration'], 3, delta=.3)
+                platforms.media.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error',
+                                     '-xerror', '-i', audio, '-f', 'null', '-'])
                 query = 'token=a%2Fb%2Bz&expires=123'
                 signed = streams.download_hls({'url': root + '/signed.m3u8?' + query, 'segment_query': query},
                                                directory / 'downloads/signed.mkv')

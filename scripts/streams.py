@@ -218,9 +218,21 @@ def download_hls(candidate, path, *, cookies=None):
                     while chunk := handle.read(1024 * 1024):
                         output.write(chunk)
                 fragment.unlink()
+        demuxer = 'mov' if parsed['init'] else 'mpegts'
+        if not parsed['init']:
+            # Packed AAC can start with an ID3 timestamp instead of a TS sync
+            # byte. Inspect bytes; never let FFmpeg auto-open a fetched playlist.
+            with joined.open('rb') as handle:
+                header = handle.read(10)
+                if header[:3] == b'ID3' and len(header) == 10 and all(value < 128 for value in header[6:]):
+                    size = sum(value << shift for value, shift in zip(header[6:], (21, 14, 7, 0)))
+                    handle.seek(10 + size + (10 if header[3] == 4 and header[5] & 0x10 else 0))
+                    header = handle.read(2)
+                if len(header) >= 2 and header[0] == 0xff and header[1] & 0xf6 == 0xf0:
+                    demuxer = 'aac'
         temporary = directory / 'complete.mkv'
         media.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-                   '-f', 'mov' if parsed['init'] else 'mpegts', '-i', joined,
+                   '-f', demuxer, '-i', joined,
                    '-map', '0:v?', '-map', '0:a?', '-c', 'copy', temporary], timeout=600)
         actual = media.probe(temporary)
         if actual['duration'] < duration - max(.25, duration * .03):

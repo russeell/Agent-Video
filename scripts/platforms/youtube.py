@@ -178,7 +178,10 @@ def _media_formats(player, *, cookies=None, want_video=True, want_audio=True):
         try:
             url, text = _fetch(streaming['hlsManifestUrl'], cookies,
                                {'User-Agent': VISIONOS_CLIENT['userAgent']})
-            hls, hls_language = _hls_formats(text, url, include_audio=want_audio and not has_audio)
+            # HLS video candidates retain their rendition group. A direct
+            # original audio URL does not satisfy that group's identity; keep
+            # the matching original HLS rendition available for selection.
+            hls, hls_language = _hls_formats(text, url, include_audio=want_audio)
             formats.extend(hls)
             language = language or hls_language
             expected_audio = expected_audio or any(f.get('has_audio') is True or f.get('audio_group') for f in hls)

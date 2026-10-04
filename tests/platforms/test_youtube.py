@@ -128,6 +128,29 @@ class YouTubeMediaTest(unittest.TestCase):
                     {'streamingData': {'adaptiveFormats': raw}}, want_video=False)
             self.assertEqual(select_formats(formats, want_video=False)[0]['url'], 'https://example.com/original')
 
+    def test_direct_original_audio_does_not_drop_matching_hls_rendition(self):
+        player = {'streamingData': {'adaptiveFormats': [
+            {'url': 'https://example.com/direct-video', 'mimeType': 'video/mp4',
+             'width': 1080, 'height': 1920, 'fps': 30, 'bitrate': 2000000},
+            {'url': 'https://example.com/direct-original', 'mimeType': 'audio/mp4',
+             'bitrate': 130000, 'audioTrack': {'id': 'zh-Hant.4', 'audioIsDefault': True,
+                'displayName': 'Chinese (Traditional) original'}}],
+            'hlsManifestUrl': 'https://example.com/master.m3u8'}}
+        master = '''#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="234",NAME="English dubbed-auto",LANGUAGE="en-US",DEFAULT=NO,URI="dub.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="234",NAME="Chinese original",LANGUAGE="zh-Hant",DEFAULT=NO,URI="original.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=5713164,RESOLUTION=1080x1920,FRAME-RATE=30,AUDIO="234"
+premium.m3u8
+'''
+        with patch.object(streams, '_fetch', return_value=('https://example.com/master.m3u8', master)):
+            formats, language, diagnostics, expected_audio = youtube._media_formats(player)
+        selected = select_formats(formats, quality='source')
+        self.assertEqual([f['url'] for f in selected],
+                         ['https://example.com/premium.m3u8', 'https://example.com/original.m3u8'])
+        self.assertEqual(language, 'zh-Hant')
+        self.assertTrue(expected_audio)
+        self.assertEqual(diagnostics, [])
+
     def test_hls_external_audio_uses_original_from_best_variant_group(self):
         master = '''#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="low",NAME="American English - dubbed-auto",LANGUAGE="en-US",DEFAULT=NO,URI="dub-low.m3u8"
