@@ -518,6 +518,49 @@ class WatchTests(unittest.TestCase):
             self.assertNotEqual(restored, audio_path)
             self.assertEqual(fetch.call_count, 3)
 
+    def test_saved_silent_video_does_not_refetch_for_audio(self):
+        from scripts import platforms
+        silent = self.root / 'silent.mp4'
+        subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', self.video,
+                        '-an', '-c:v', 'copy', silent], check=True)
+        source = {'platform': 'reddit', 'id': 'abc', 'url': 'https://www.reddit.com/comments/abc/'}
+        resolved = {'source': source, 'metadata': {'duration': 2, 'audio_expected': False},
+                    'subtitles': [], 'diagnostics': [],
+                    'formats': [{'url': 'media', 'width': 160, 'height': 120,
+                                 'has_video': True, 'has_audio': False}]}
+        def download(resolved, directory, **kwargs):
+            directory.mkdir(parents=True, exist_ok=True)
+            dest = directory / 'silent.mp4'
+            shutil.copy2(silent, dest)
+            return dest
+        with patch.object(platforms, 'resolve', return_value=resolved), \
+                patch.object(platforms, 'download', side_effect=download):
+            code, first = self.call(source['url'], '--get', 'video', '--out', str(self.root / 'out'))
+        self.assertEqual(code, 0, first)
+        with patch.object(platforms, 'resolve', side_effect=AssertionError('Unexpected resolve')) as resolve, \
+                patch.object(platforms, 'download', side_effect=AssertionError('Unexpected download')) as fetch:
+            code, followup = self.call('--evidence', first['manifest'], '--get', 'audio,frames', '--at', '0.2', '--width', '0')
+        self.assertEqual(code, 2, followup)
+        self.assertEqual([d['code'] for d in followup['diagnostics']], ['no_audio'])
+        self.assertTrue(any(a['type'] == 'frames' for a in followup['artifacts']))
+        resolve.assert_not_called()
+        fetch.assert_not_called()
+        # A frames-only source or a changed access context can omit available
+        # audio. Neither is evidence that the source is silent.
+        data = json.loads(Path(first['manifest']).read_text())
+        for frames_only in (True, False):
+            with self.subTest(frames_only=frames_only):
+                for a in data['artifacts']:
+                    if a.get('internal'):
+                        a['frames_only'] = frames_only
+                Path(first['manifest']).write_text(json.dumps(data))
+                cookie = self.root / 'cookies.txt'
+                cookie.write_text('# Netscape HTTP Cookie File\n')
+                extra = [] if frames_only else ['--cookies', str(cookie)]
+                with patch.object(platforms, 'resolve', side_effect=media.Failure('network_failed', 'New source required.')) as resolve:
+                    code, followup = self.call('--evidence', first['manifest'], '--get', 'audio', *extra)
+                resolve.assert_called_once()
+                self.assertEqual([d['code'] for d in followup['diagnostics']], ['network_failed'])
     def test_bilibili_old_source_quality_upgrades_video_frames_and_metadata_once(self):
         from scripts import platforms
         samples = {}

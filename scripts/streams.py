@@ -1,6 +1,7 @@
 """Shared non-encrypted VOD HLS transport for dedicated platform adapters.
 
-Research: yt-dlp downloader/hls.py (Unlicense). This module receives explicit
+Research: yt-dlp downloader/hls.py (Unlicense), including byte-range offsets.
+This module receives explicit
 platform media candidates; it does not resolve arbitrary websites or URLs.
 """
 import http.client
@@ -100,8 +101,8 @@ def _playlist(text, url):
     for line in lines:
         if line.startswith(('#EXT-X-KEY:', '#EXT-X-SESSION-KEY:')) and _value(_attrs(line.split(':', 1)[1]), 'METHOD') != 'NONE':
             raise Failure('encrypted_stream_unsupported', 'Encrypted HLS is not supported.', 'Provide an unencrypted media file.')
-        if line.startswith(('#EXT-X-BYTERANGE', '#EXT-X-DISCONTINUITY', '#EXT-X-GAP', '#EXT-X-PART', '#EXT-X-SKIP', '#EXT-X-I-FRAMES-ONLY', '#EXT-X-DEFINE')):
-            raise Failure('hls_feature_unsupported', 'HLS byte ranges, discontinuities, gaps and low latency features are unsupported.')
+        if line.startswith(('#EXT-X-DISCONTINUITY', '#EXT-X-GAP', '#EXT-X-PART', '#EXT-X-SKIP', '#EXT-X-I-FRAMES-ONLY', '#EXT-X-DEFINE')):
+            raise Failure('hls_feature_unsupported', 'HLS discontinuities, gaps and low latency features are unsupported.')
     if any(line.startswith('#EXT-X-STREAM-INF:') for line in lines):
         if any(line.startswith('#EXT-X-MEDIA:') and _value(_attrs(line.split(':', 1)[1]), 'TYPE') in ('AUDIO', 'VIDEO') for line in lines):
             raise Failure('hls_feature_unsupported', 'HLS with separate rendition groups is not supported yet.', 'Use a muxed media file.')
@@ -126,8 +127,8 @@ def _playlist(text, url):
         return formats, None
     if '#EXT-X-ENDLIST' not in lines:
         raise Failure('live_unsupported', 'HLS must be a completed VOD playlist with EXT-X-ENDLIST.')
-    segments, durations, init = [], [], None
-    pending = None
+    segments, durations, ranges, init = [], [], [], None
+    pending, byte_range = None, None
     for line in lines:
         if line.startswith('#EXTINF:'):
             if pending is not None:
@@ -138,6 +139,11 @@ def _playlist(text, url):
                     raise ValueError
             except ValueError:
                 raise Failure('parse_failed', 'HLS has an invalid segment duration.') from None
+        elif line.startswith('#EXT-X-BYTERANGE:'):
+            match = re.fullmatch(r'(\d+)(?:@(\d+))?', line.split(':', 1)[1])
+            if byte_range is not None or not match or int(match[1]) <= 0:
+                raise Failure('parse_failed', 'HLS has an invalid byte range.')
+            byte_range = (int(match[1]), int(match[2]) if match[2] is not None else None)
         elif line.startswith('#EXT-X-MAP:'):
             attrs = _attrs(line.split(':', 1)[1])
             if init or segments or 'BYTERANGE' in attrs or not _value(attrs, 'URI'):
@@ -146,12 +152,32 @@ def _playlist(text, url):
         elif not line.startswith('#'):
             if pending is None:
                 raise Failure('parse_failed', 'HLS media segment lacks EXTINF duration.')
-            segments.append(urljoin(url, line))
+            address = urljoin(url, line)
+            if byte_range is not None:
+                length, start = byte_range
+                if start is None:
+                    if not ranges or ranges[-1] is None or segments[-1] != address:
+                        raise Failure('parse_failed', 'HLS implicit byte range has no preceding range in the same resource.')
+                    start = ranges[-1][1]
+                ranges.append((start, start + length))
+            else:
+                ranges.append(None)
+            segments.append(address)
             durations.append(pending)
-            pending = None
-    if not segments or pending is not None:
+            pending, byte_range = None, None
+    if not segments or pending is not None or byte_range is not None:
         raise Failure('parse_failed', 'HLS playlist has no complete media segments.')
-    return {'segments': segments, 'init': init, 'duration': sum(durations)}, sum(durations)
+    size = None
+    if any(ranges):
+        # Completed contiguous ranges in one full TS resource need one download,
+        # not a repeated download of the same blob for every EXTINF entry.
+        end = 0
+        for address, span in zip(segments, ranges):
+            if init or address != segments[0] or span is None or span[0] != end:
+                raise Failure('hls_feature_unsupported', 'HLS byte ranges must cover one complete resource from byte zero without gaps.')
+            end = span[1]
+        segments, size = segments[:1], end
+    return {'segments': segments, 'init': init, 'size': size, 'duration': sum(durations)}, sum(durations)
 
 
 def download_hls(candidate, path, *, cookies=None):
@@ -169,6 +195,8 @@ def download_hls(candidate, path, *, cookies=None):
         with joined.open('wb') as output:
             for address in addresses:
                 fragment = download_file(address, directory / 'fragment', headers=candidate.get('headers'), cookies=cookies)
+                if parsed['size'] is not None and fragment.stat().st_size != parsed['size']:
+                    raise Failure('download_incomplete', 'HLS resource size does not match its complete byte ranges.')
                 with fragment.open('rb') as handle:
                     while chunk := handle.read(1024 * 1024):
                         output.write(chunk)

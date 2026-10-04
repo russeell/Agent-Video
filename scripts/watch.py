@@ -358,6 +358,10 @@ class Watch:
                         (a.get('audio_track') is not None and not info['audio'])):
                     continue
                 if purpose == 'audio' and not info['audio']:
+                    if (a.get('internal') and not a.get('frames_only')
+                            and a.get('audio_track') is None
+                            and (self.access_context is None or a.get('access_context') == self.access_context)):
+                        raise media.Failure('no_audio', 'The saved complete video has no audio stream.')
                     continue
                 if purpose == 'frames' and a.get('quality') != 'source':
                     ceiling = a.get('available_max_width')

@@ -9,7 +9,7 @@ import html
 import re
 from urllib.parse import urljoin, urlsplit
 import xml.etree.ElementTree as ET
-from . import Failure, diagnostic, media, read_json, read_text
+from . import Failure, _opener, diagnostic, media, read_json, read_text
 
 
 def _identity(url):
@@ -31,6 +31,29 @@ def _post(data, identifier):
     if not isinstance(post, dict) or post.get('id') != identifier:
         raise Failure('parse_failed', 'Reddit response does not identify the requested post.')
     return post
+
+
+def _load_post(canonical, identifier, *, cookies=None):
+    """Retry a denied public JSON once with platform-issued anonymous cookies.
+
+    The public entry can redirect to a login page while issuing a guest loid.
+    We only receive that response; no account, form or preference is changed.
+    """
+    client = _opener(cookies)
+    address = canonical + '.json?raw_json=1'
+    try:
+        return _post(read_json(address, cookies=cookies, opener=client), identifier)
+    except Failure as exc:
+        if exc.code != 'access_denied':
+            raise
+    read_text('https://old.reddit.com/', cookies=cookies, opener=client)
+    try:
+        return _post(read_json(address, cookies=cookies, opener=client), identifier)
+    except Failure as exc:
+        if exc.code == 'access_denied':
+            raise Failure('access_denied', 'Reddit denied the public post JSON after one anonymous session initialization.',
+                          'Retry later or provide a local media file; the response does not establish a login requirement.') from None
+        raise
 
 
 def _mpd(text, url):
@@ -79,7 +102,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
         raise Failure('invalid_part', '--part only applies to Bilibili.')
     identifier = _identity(url)
     canonical = f'https://www.reddit.com/comments/{identifier}/'
-    post = _post(read_json(canonical + '.json?raw_json=1', cookies=cookies), identifier)
+    post = _load_post(canonical, identifier, cookies=cookies)
     video = next(((post.get(k) or {}).get('reddit_video') for k in ('secure_media', 'media')
                   if (post.get(k) or {}).get('reddit_video')), {})
     # Crossposts are not silently mapped to another post's media.
@@ -116,6 +139,22 @@ def resolve(url, *, part=None, cookies=None, need=None):
                 metadata['audio_expected'] = any(f['has_audio'] for f in formats)
         except Failure as exc:
             result['diagnostics'].append(diagnostic('media' if media_needed else 'transcript', exc))
+    # Reddit's HLS ladder can expose a higher resolution than its fallback/MPD.
+    # Preserve separately returned original audio rather than inventing URLs.
+    if media_needed and video.get('hls_url'):
+        try:
+            if __package__ == 'scripts.platforms':
+                from ..streams import hls_formats
+            else:
+                from streams import hls_formats
+            address = html.unescape(video['hls_url'])
+            formats, _ = hls_formats(read_text(address, cookies=cookies), address,
+                                    include_audio=bool(needs.intersection(('video', 'audio', 'media'))))
+            result['formats'].extend(formats)
+            if metadata['audio_expected'] is None and any(f.get('has_audio') for f in formats):
+                metadata['audio_expected'] = True
+        except Failure as exc:
+            result['diagnostics'].append(diagnostic('media', exc))
     if media_needed and not any(f['has_video'] for f in result['formats']):
         fallback = video.get('fallback_url')
         if isinstance(fallback, str) and urlsplit(fallback).scheme == 'https':

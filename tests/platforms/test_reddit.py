@@ -59,3 +59,47 @@ class RedditTests(unittest.TestCase):
         for url in ['https://www.reddit.com/r/aww/', 'https://v.redd.it/clip', 'https://evil.test/comments/abc']:
             with self.assertRaises(platforms.Failure):
                 reddit._identity(url)
+
+    def test_cold_denial_initializes_guest_once_and_reuses_scoped_opener(self):
+        client = object()
+        with patch.object(reddit, '_opener', return_value=client), patch.object(reddit, 'read_json',
+                side_effect=[platforms.Failure('access_denied', 'HTTP 403'), post()]) as read_json, \
+                patch.object(reddit, 'read_text', return_value='<html>Anonymous entry</html>') as read_text:
+            result = reddit._load_post('https://www.reddit.com/comments/abc/', 'abc')
+        self.assertEqual(result['id'], 'abc')
+        self.assertEqual(read_json.call_count, 2)
+        self.assertEqual(read_text.call_count, 1)
+        self.assertEqual(read_text.call_args.args[0], 'https://old.reddit.com/')
+        self.assertIs(read_text.call_args.kwargs['opener'], client)
+        for call in read_json.call_args_list:
+            self.assertIs(call.kwargs['opener'], client)
+            self.assertEqual(call.args[0], 'https://www.reddit.com/comments/abc/.json?raw_json=1')
+            self.assertNotIn('Cookie', call.kwargs.get('headers', {}))
+
+    def test_guest_retry_is_bounded_and_does_not_assume_login_required(self):
+        with patch.object(reddit, 'read_json', side_effect=platforms.Failure('access_denied', 'HTTP 403')) as read_json, \
+                patch.object(reddit, 'read_text', return_value='<html>Anonymous entry</html>') as read_text:
+            with self.assertRaises(platforms.Failure) as caught:
+                reddit._load_post('https://www.reddit.com/comments/abc/', 'abc')
+        self.assertEqual(read_json.call_count, 2)
+        self.assertEqual(read_text.call_count, 1)
+        self.assertEqual(caught.exception.code, 'access_denied')
+        self.assertIn('does not establish a login requirement', caught.exception.next_action)
+
+    def test_wrong_post_does_not_bootstrap_or_substitute_neighbors(self):
+        with patch.object(reddit, 'read_json', return_value=post()), patch.object(reddit, 'read_text') as read_text:
+            with self.assertRaises(platforms.Failure):
+                reddit._load_post('https://www.reddit.com/comments/other/', 'other')
+        read_text.assert_not_called()
+
+    def test_hls_higher_resolution_keeps_actual_audio(self):
+        video = {'dash_url': 'https://v.redd.it/clip/a.mpd', 'hls_url': 'https://v.redd.it/clip/master.m3u8'}
+        master = '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,URI="audio.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=3000,RESOLUTION=1920x1080,AUDIO="audio"\nhigh.m3u8\n'
+        with patch.object(reddit, 'read_json', return_value=post(video)), patch.object(reddit, 'read_text', side_effect=[MPD, master]):
+            result = reddit.resolve('https://www.reddit.com/comments/abc', need=['video'])
+        selected = platforms.select_formats(result['formats'], quality='source')
+        self.assertEqual((selected[0]['width'], selected[0]['height']), (1920, 1080))
+        self.assertEqual(selected[0]['protocol'], 'hls')
+        self.assertFalse(selected[0]['has_audio'])
+        self.assertTrue(selected[1]['has_audio'])
+        self.assertEqual(selected[1]['audio_group'], 'audio')

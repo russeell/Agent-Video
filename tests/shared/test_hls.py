@@ -52,9 +52,10 @@ video-high.m3u8
                 '-f', 'lavfi', '-i', 'testsrc2=size=160x90:rate=10:duration=3',
                 '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-c:v', 'mpeg4',
                 '-g', '10', '-c:a', 'aac', '-shortest', directory / 'source.mp4'])
-            for name, extra in [('vod', []), ('fragmented', ['-hls_segment_type', 'fmp4'])]:
+            for name, extra in [('vod', []), ('fragmented', ['-hls_segment_type', 'fmp4']),
+                                ('single', ['-hls_flags', 'single_file'])]:
                 platforms.media.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-                    '-i', directory / 'source.mp4', '-c:v', 'mpeg2video' if name == 'vod' else 'copy', '-g', '10', '-c:a', 'copy', '-hls_time', '1', '-hls_list_size', '0',
+                    '-i', directory / 'source.mp4', '-c:v', 'copy' if name == 'fragmented' else 'mpeg2video', '-g', '10', '-c:a', 'copy', '-hls_time', '1', '-hls_list_size', '0',
                     *extra, directory / (name + '.m3u8')])
             (directory / 'master.m3u8').write_text('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100000,RESOLUTION=160x90,FRAME-RATE=60\nvod.m3u8\n')
             server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), partial(Handler, directory=str(directory)))
@@ -70,7 +71,7 @@ video-high.m3u8
                 self.assertTrue(any('session=secret' in value for path, value in observed if path == '/cross.m3u8'))
                 self.assertTrue(any(path.endswith('.ts') for path, value in observed))
                 self.assertTrue(all(not value for path, value in observed if path.endswith('.ts')))
-                for name in ('vod.m3u8', 'fragmented.m3u8', 'master.m3u8'):
+                for name in ('vod.m3u8', 'fragmented.m3u8', 'master.m3u8', 'single.m3u8'):
                     with self.subTest(name=name):
                         url, text = streams._fetch(root + '/' + name)
                         parsed, duration = streams._playlist(text, url)
@@ -84,6 +85,21 @@ video-high.m3u8
                         self.assertTrue(actual['video'])
                         self.assertTrue(actual['audio'])
                         self.assertAlmostEqual(actual['duration'], 3, delta=.3)
+                self.assertEqual(sum(path == '/single.ts' for path, _ in observed), 1)
+                # Implicit offsets have the same byte coverage. No network Range
+                # support is needed when the playlist covers the complete blob.
+                single = (directory / 'single.m3u8').read_text()
+                implicit = re.sub(r'(?m)(#EXT-X-BYTERANGE:\d+)@(?!0$)\d+$', r'\1', single)
+                (directory / 'implicit.m3u8').write_text(implicit)
+                output = streams.download_hls({'url': root + '/implicit.m3u8'}, directory / 'downloads/implicit.mkv')
+                self.assertAlmostEqual(platforms.media.probe(output)['duration'], 3, delta=.3)
+                # Reject a resource whose bytes do not cover the entire playlist,
+                # before remuxing it into a plausible but incomplete video.
+                (directory / 'single.ts').write_bytes((directory / 'single.ts').read_bytes()[:-188])
+                with self.assertRaises(platforms.Failure) as caught:
+                    streams.download_hls({'url': root + '/single.m3u8'}, directory / 'downloads/incomplete.mkv')
+                self.assertEqual(caught.exception.code, 'download_incomplete')
+                self.assertFalse((directory / 'downloads/incomplete.mkv').exists())
                 (directory / 'short.m3u8').write_text(re.sub(r'#EXTINF:[^,]+', '#EXTINF:10', (directory / 'vod.m3u8').read_text()))
                 with self.assertRaises(platforms.Failure) as caught:
                     streams.download_hls({'url': root + '/short.m3u8'}, directory / 'downloads/short.mkv')
@@ -99,9 +115,28 @@ video-high.m3u8
         for text, code in [
             (base.replace('#EXT-X-ENDLIST', ''), 'live_unsupported'),
             (base.replace('#EXTINF', '#EXT-X-KEY:METHOD=AES-128,URI="key"\n#EXTINF'), 'encrypted_stream_unsupported'),
-            (base.replace('#EXTINF', '#EXT-X-BYTERANGE:100@0\n#EXTINF'), 'hls_feature_unsupported'),
+            (base.replace('#EXTINF', '#EXT-X-BYTERANGE:100@1\n#EXTINF'), 'hls_feature_unsupported'),
             (base.replace('#EXTINF', '#EXT-X-DISCONTINUITY\n#EXTINF'), 'hls_feature_unsupported'),
             ('#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",URI="a.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=100,AUDIO="a"\nv.m3u8\n', 'hls_feature_unsupported'),
+        ]:
+            with self.subTest(code=code), self.assertRaises(platforms.Failure) as caught:
+                streams._playlist(text, 'https://example.test/media.m3u8')
+            self.assertEqual(caught.exception.code, code)
+
+    def test_byte_range_validation(self):
+        base = '#EXTM3U\n#EXTINF:1,\n#EXT-X-BYTERANGE:100@0\na.ts\n#EXTINF:1,\n#EXT-X-BYTERANGE:50\na.ts\n#EXT-X-ENDLIST\n'
+        parsed, duration = streams._playlist(base, 'https://example.test/media.m3u8')
+        self.assertEqual(parsed['segments'], ['https://example.test/a.ts'])
+        self.assertEqual((parsed['size'], duration), (150, 2))
+        for text, code in [
+            (base.replace('100@0', '100'), 'parse_failed'),
+            (base.replace('100@0', '0@0'), 'parse_failed'),
+            (base.replace('100@0', '-100@0'), 'parse_failed'),
+            (base.replace('50\na.ts', '50\nb.ts'), 'parse_failed'),
+            (base.replace('50\na.ts', '50@0\nb.ts'), 'hls_feature_unsupported'),
+            (base.replace('50\na.ts', '50@101\na.ts'), 'hls_feature_unsupported'),
+            (base.replace('#EXT-X-BYTERANGE:50\n', ''), 'hls_feature_unsupported'),
+            (base.replace('#EXT-X-ENDLIST', '#EXT-X-BYTERANGE:10@150\n#EXT-X-ENDLIST'), 'parse_failed'),
         ]:
             with self.subTest(code=code), self.assertRaises(platforms.Failure) as caught:
                 streams._playlist(text, 'https://example.test/media.m3u8')
