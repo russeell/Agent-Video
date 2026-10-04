@@ -65,6 +65,12 @@ Douyin and Instagram’s anonymous page-reading path require **Google Chrome**, 
 
 Chrome is detected in its normal macOS / Windows location, or `google-chrome`, `chromium` or `chromium-browser` on `PATH`. Interactive verification or login pages may still prevent access; these are not automated.
 
+## WeChat Channels
+
+Use a `weixin.qq.com/sph/...` share link or a `channels.weixin.qq.com/finder-preview/pages/feed?...` playback link. Public shares can return information without a video stream. For playback, try a valid preview link or supply your own exported **yuanbao.tencent.com Netscape Cookie file** with `--cookies "/path/to/cookies.txt"`. The official Yuanbao parser is contacted only when media is needed and the share preview provides none; information-only requests do not require it.
+
+Agent Video does not read browser credentials, install interception certificates or use a third-party parser service. Captions and authenticated downloads are not yet verified; preview access restrictions may still prevent retrieval. The work description is not a transcript.
+
 ## Optional speech-to-text
 
 Install the optional dependencies:

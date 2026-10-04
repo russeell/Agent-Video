@@ -77,8 +77,9 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 | **Reddit** | Experimental: native-video downloads, screenshots and reuse tested, including videos without audio |
 | **Kuaishou** | Experimental: public works and share links tested, including 720p downloads with audio, screenshots and reuse |
 | **Xiaohongshu** | Experimental: tested notes redirected to unavailable or security pages; information and downloads remain unverified |
+| **WeChat Channels** | Experimental: public share-link information tested; playback-link and user-supplied Yuanbao Cookie paths implemented, downloads remain unverified ([setup](INSTALL.md#wechat-channels)) |
 
-Public links can still require authentication or verification. Netflix and WeChat Channels are not supported: Netflix uses protected playback, while the researched Channels tools depend on a WeChat client or authenticated session. Facebook, unknown websites, direct media links, live streams and DRM-protected videos are not supported. Downloaded files can be used as local input.
+Public links can still require authentication or verification. Netflix, Facebook, unknown websites, direct media links, live streams and DRM-protected videos are not supported. Downloaded files can be used as local input.
 
 Bilibili supporter-only videos require an account with access and an explicitly supplied Cookie file; a public video page does not guarantee public playback.
 

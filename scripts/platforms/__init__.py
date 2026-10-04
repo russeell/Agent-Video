@@ -334,6 +334,9 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if host in ('weibo.com', 'www.weibo.com', 'm.weibo.cn', 'video.weibo.com'):
         from . import weibo
         return weibo.resolve(url, part=part, cookies=cookies, need=need)
+    if host in ('weixin.qq.com', 'channels.weixin.qq.com'):
+        from . import wechat
+        return wechat.resolve(url, part=part, cookies=cookies, need=need)
     if re.fullmatch(r'(?:(?:www|[a-z]{2})\.)?pornhub\.(?:com|net|org)', host):
         from . import pornhub
         return pornhub.resolve(url, part=part, cookies=cookies, need=need)

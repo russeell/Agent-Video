@@ -4,7 +4,7 @@ from unittest.mock import patch
 from scripts import platforms
 from scripts.platforms import (bilibili, dailymotion, douyin, instagram, kuaishou,
                               pornhub, reddit, ted, tiktok, twitch, twitter, vimeo, weibo,
-                              xiaohongshu, youtube)
+                              wechat, xiaohongshu, youtube)
 
 
 class RoutingTest(unittest.TestCase):
@@ -27,6 +27,9 @@ class RoutingTest(unittest.TestCase):
                   (ted, 'https://www.ted.com/talks/example', None),
                   (twitch, 'https://clips.twitch.tv/example', None),
                   (weibo, 'https://m.weibo.cn/status/1234', None),
+                  (wechat, 'https://weixin.qq.com/sph/PublicWork', None),
+                  (wechat, 'https://channels.weixin.qq.com/finder-preview/pages/sph?id=PublicWork', None),
+                  (wechat, 'https://channels.weixin.qq.com/finder-preview/pages/feed?token=public&eid=work', None),
                   (pornhub, 'https://cn.pornhub.com/view_video.php?viewkey=ph1234', None)]
         with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('Routing must not access HTTP')) as network:
             for adapter, source, part in routes:
@@ -43,7 +46,7 @@ class RoutingTest(unittest.TestCase):
                    ('https://youtube.com.evil.test/watch?v=abcdefghijk', 'unsupported_source'),
                    ('https://www.facebook.com/watch/?v=1234', 'unsupported_source'),
                    ('https://www.netflix.com/title/1234', 'unsupported_source'),
-                   ('https://channels.weixin.qq.com/', 'unsupported_source'),
+                   ('https://weixin.qq.com.evil.test/sph/PublicWork', 'unsupported_source'),
                    ('https://x.com.evil.test/example/status/1234', 'unsupported_source'),
                    ('https://pornhub.com.evil.test/view_video.php?viewkey=ph1234', 'unsupported_source'),
                    ('https://v.qq.com/x/page/q326831cny0.html', 'unsupported_source'),
