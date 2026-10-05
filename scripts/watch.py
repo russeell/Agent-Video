@@ -53,8 +53,8 @@ def parser():
     p.add_argument('--start', metavar='TIME',
                    help='Start in the original video: seconds, MM:SS or HH:MM:SS (default: 0).')
     p.add_argument('--end', metavar='TIME', help='End in the same time formats, after --start (default: video end).')
-    p.add_argument('--at', metavar='TIMES',
-                   help='Comma-separated original-video times, e.g. 00:10,01:23; requires frames, excludes --start/--end.')
+    p.add_argument('--at', action='append', metavar='TIMES',
+                   help='Original-video times, e.g. 00:10,01:23; comma-separated or repeated; requires frames, excludes --start/--end.')
     p.add_argument('--max-frames', type=int, default=12,
                    help='Frame budget, including explicit --at times (default: %(default)s).')
     p.add_argument('--width', type=int, default=768,
@@ -83,7 +83,7 @@ def validate(args):
     try:
         args.begin = media.clock(args.start) if args.start is not None else 0.0
         args.finish = media.clock(args.end) if args.end is not None else None
-        args.times = [media.clock(t) for t in args.at.split(',')] if args.at is not None else None
+        args.times = [media.clock(t) for group in args.at for t in group.split(',')] if args.at is not None else None
     except ValueError as exc:
         raise InputError(str(exc)) from None
     if args.finish is not None and args.finish <= args.begin:

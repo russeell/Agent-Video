@@ -61,6 +61,36 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(direct.stdout.strip(), expected)
 
     @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg is required')
+    def test_timestamp_flags_keep_all_times_and_enforce_budget(self):
+        video = self.root / 'timestamps.mp4'
+        subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i',
+                        'color=size=64x48:rate=5:duration=1', '-c:v', 'mpeg4', str(video)], check=True)
+        for index, flags in enumerate([
+            ['--at', '.2,.4,.6'],
+            ['--at', '.2', '--at', '.4,.6'],
+        ]):
+            with self.subTest(flags=flags):
+                run = self.call(video, '--get', 'frames', *flags, '--width', '0', '--out', self.root / str(index))
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                result = json.loads(run.stdout)
+                frames = [a for a in result['artifacts'] if a['type'] == 'frames']
+                self.assertEqual(len(frames), 3)
+                self.assertTrue(all(Path(a['path']).is_file() for a in frames))
+                saved = json.loads(Path(result['manifest']).read_text(encoding='utf-8'))
+                actual = [a for a in saved['artifacts'] if a['type'] == 'frames']
+                self.assertEqual([a['requested_time'] for a in actual], [.2, .4, .6])
+                for a in actual:
+                    self.assertAlmostEqual(a['actual_time'], a['requested_time'], places=3)
+        for flags in [
+            ['--at', '.2,.4', '--at', '.6', '--max-frames', '2'],
+            ['--at', 'invalid', '--at', '.6'],
+        ]:
+            with self.subTest(invalid=flags):
+                run = self.call(video, '--get', 'frames', *flags)
+                self.assertEqual(run.returncode, 64, run.stdout + run.stderr)
+                self.assertIsNone(json.loads(run.stdout)['manifest'])
+
+    @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg is required')
     def test_local_subtitles_and_manifest_reuse(self):
         video = self.root / 'local video.mp4'
         subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i',
