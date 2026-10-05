@@ -31,7 +31,7 @@ class WechatFlowTests(unittest.TestCase):
             self.assertEqual([a['type'] for a in result['artifacts']], ['info'])
             metadata = json.loads(Path(result['artifacts'][0]['path']).read_text())
             self.assertEqual(metadata['description'], 'Work description')
-            self.assertTrue(any(d['code'] == 'auth_required' for d in result['diagnostics']))
+            self.assertTrue(any(d['code'] == 'media_unavailable' for d in result['diagnostics']))
             with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('Saved info must not refetch')) as network:
                 code, reused = self.call('--evidence', result['manifest'], '--get', 'info')
             self.assertEqual(code, 0, reused)

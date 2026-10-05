@@ -10,9 +10,10 @@ import json
 import math
 import re
 import time
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
+from urllib.request import Request
 import uuid
-from . import Failure, diagnostic, read_json
+from . import Failure, _cookie_jar, diagnostic, read_json
 
 ORIGIN = 'https://channels.weixin.qq.com'
 PREVIEW = ORIGIN + '/finder-preview/pages/'
@@ -29,23 +30,51 @@ def _identity(url):
         if match:
             return match[1], 'https://weixin.qq.com/sph/' + match[1], None
     if parsed.hostname == 'channels.weixin.qq.com':
+        tokens = query.get('token', [])
+        if len(tokens) > 1:
+            raise Failure('invalid_url', 'A Channels preview link must contain at most one token.')
+        token = tokens[0] if tokens and tokens[0] else None
         if parsed.path.rstrip('/') == '/finder-preview/pages/sph':
             ids = query.get('id', [])
             if len(ids) == 1 and re.fullmatch(r'[A-Za-z0-9_-]+', ids[0]):
+                if token is not None:
+                    canonical = PREVIEW + 'sph?' + urlencode({'id': ids[0], 'token': token})
+                    return ids[0], canonical, token
                 return ids[0], 'https://weixin.qq.com/sph/' + ids[0], None
         if parsed.path.rstrip('/') == '/finder-preview/pages/feed':
-            tokens, ids = query.get('token', []), query.get('eid', [])
-            if len(tokens) == len(ids) == 1 and tokens[0] and ids[0]:
-                canonical = PREVIEW + 'feed?' + urlencode({'token': tokens[0], 'eid': ids[0]})
-                return ids[0], canonical, tokens[0]
+            ids = query.get('eid', [])
+            if len(ids) == 1 and ids[0]:
+                access = {'token': token, 'eid': ids[0]} if token is not None else {'eid': ids[0]}
+                canonical = PREVIEW + 'feed?' + urlencode(access)
+                return ids[0], canonical, token
     raise Failure('invalid_url', 'Use a WeChat Channels sph share or finder-preview playback link; profiles and homepages are unsupported.')
 
 
+def _cookie_token(cookies, page):
+    if not cookies:
+        return None
+    jar = _cookie_jar(cookies)
+    # The official page reads document.cookie, which cannot see HttpOnly values.
+    for cookie in list(jar):
+        if cookie.has_nonstandard_attr('HTTPOnly') or cookie.has_nonstandard_attr('HttpOnly'):
+            jar.clear(cookie.domain, cookie.path, cookie.name)
+    request = Request(page)
+    jar.add_cookie_header(request)
+    for item in request.get_header('Cookie', '').split(';'):
+        name, separator, value = item.strip().partition('=')
+        if name == 'token' and separator:
+            return unquote(value)
+    return None
+
+
 def _feed(identifier, canonical, token=None, cookies=None):
-    page = canonical if token is not None else PREVIEW + 'sph?' + urlencode({'id': identifier})
-    query = urlencode({'_rid': f'{int(time.time() * 1000):x}-{uuid.uuid4().hex[:8]}', '_pageUrl': page})
-    body = {'baseReq': {'generalToken': token or ''},
-            'exportId' if token is not None else 'shortUri': identifier}
+    is_short_uri = urlsplit(canonical).path.rstrip('/') != '/finder-preview/pages/feed'
+    page = PREVIEW + 'sph?' + urlencode({'id': identifier}) if urlsplit(canonical).hostname == 'weixin.qq.com' else canonical
+    # Current official client uses Unix seconds and removes the page query.
+    page_path = urlsplit(page)._replace(query='', fragment='').geturl()
+    query = urlencode({'_rid': f'{int(time.time()):x}-{uuid.uuid4().hex[:8]}', '_pageUrl': page_path})
+    body = {'baseReq': {'generalToken': token or _cookie_token(cookies, page) or ''},
+            'shortUri' if is_short_uri else 'exportId': identifier}
     result = read_json(ORIGIN + '/finder-preview/api/feed/get_feed_info?' + query,
                        headers={'Content-Type': 'application/json', 'Origin': ORIGIN, 'Referer': page},
                        cookies=cookies, data=json.dumps(body).encode())
@@ -82,7 +111,7 @@ def _playback(share, cookies):
         identifier, page, token = _identity(data['playable_url'])
     except (Failure, ValueError):
         raise Failure('parse_failed', 'Yuanbao returned an unrecognized Channels playback link.') from None
-    if token is None:
+    if token is None or urlsplit(page).path.rstrip('/') != '/finder-preview/pages/feed':
         raise Failure('parse_failed', 'Yuanbao did not return a Channels playback token and work ID.')
     return identifier, page, token
 
@@ -133,11 +162,14 @@ def resolve(url, *, part=None, cookies=None, need=None):
         data = _feed(identifier, canonical, token, cookies)
     except Failure as exc:
         initial_error = exc
+    if data and data['feedInfo'].get('mediaType') == 2:
+        raise Failure('unsupported_content', 'This Channels work is an image post, not a video.')
     available = _formats(data['feedInfo']) if data else []
-    if token is None and media_needed and not available:
+    is_short_uri = urlsplit(canonical).path.rstrip('/') != '/finder-preview/pages/feed'
+    if is_short_uri and token is None and media_needed and not available:
         try:
             if not cookies:
-                raise Failure('auth_required', 'WeChat public share preview returned no video stream.',
+                raise Failure('media_unavailable', 'WeChat public share preview returned no video stream.',
                               'Provide a playable finder-preview link or an explicitly exported Yuanbao Cookie file with --cookies.')
             eid, page, playback_token = _playback(canonical, cookies)
             data = _feed(eid, page, playback_token, cookies)
@@ -147,16 +179,23 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if data is None:
         raise initial_error or Failure('parse_failed', 'No Channels work information was obtained.')
     feed = data['feedInfo']
-    if feed.get('mediaType') == 2 or feed.get('picInfo') and feed.get('mediaType') != 4 and not available:
+    if feed.get('mediaType') == 2:
         raise Failure('unsupported_content', 'This Channels work is an image post, not a video.')
     duration_ms = _number(feed.get('durationMs'))
     description = feed.get('description')
+    thumbnail = feed.get('coverUrl')
+    try:
+        cover = urlsplit(thumbnail) if isinstance(thumbnail, str) else None
+        if not cover or cover.scheme not in ('http', 'https') or not cover.hostname or cover.query or cover.username or cover.password:
+            thumbnail = None
+    except ValueError:
+        thumbnail = None
     author = data.get('authorInfo') if isinstance(data.get('authorInfo'), dict) else {}
     source = {'platform': 'wechat', 'id': identifier, 'url': canonical}
     metadata = {**source, 'title': feed.get('title') or (description[:120] if isinstance(description, str) else None),
                 'description': description, 'author': author.get('nickname'),
                 'duration': duration_ms / 1000 if duration_ms is not None else None,
-                'published_at': _number(feed.get('createtime')), 'thumbnail': feed.get('coverUrl'),
+                'published_at': _number(feed.get('createtime')), 'thumbnail': thumbnail,
                 'view_count': None, 'like_count': _number(feed.get('likeCountFmt')),
                 'comment_count': _number(feed.get('commentCountFmt')), 'audio_expected': None,
                 'experimental': True, 'collected_at': datetime.now(timezone.utc).isoformat()}
