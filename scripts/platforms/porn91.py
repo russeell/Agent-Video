@@ -26,10 +26,11 @@ def _identity(url):
 
 
 class _Page(HTMLParser):
-    def __init__(self):
+    def __init__(self, *, decode=True):
         super().__init__()
         self.meta, self.links, self.sources, self.tracks, self.title = {}, [], [], [], []
         self.in_title = self.in_video = self.has_player = False
+        self.decode, self.script = decode, None
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -50,9 +51,18 @@ class _Page(HTMLParser):
             self.sources.append(attrs['src'])
         elif tag == 'track' and self.in_video and attrs.get('kind') in ('captions', 'subtitles'):
             self.tracks.append(attrs)
+        elif tag == 'script' and self.in_video and self.decode and not attrs.get('src'):
+            self.script = []
 
     def handle_endtag(self, tag):
-        if tag == 'title':
+        if tag == 'script' and self.script is not None:
+            for match in re.finditer(r'''document\.write\(\s*strencode2\(\s*(["'])([^"']+)\1\s*\)\s*\)''', ''.join(self.script)):
+                # Decode only data emitted inside the target player, in order.
+                fragment = _Page(decode=False)
+                fragment.feed('<video id="player_one">' + unquote(match[2]) + '</video>')
+                self.sources.extend(fragment.sources)
+            self.script = None
+        elif tag == 'title':
             self.in_title = False
         elif tag == 'video':
             self.in_video = False
@@ -60,6 +70,8 @@ class _Page(HTMLParser):
     def handle_data(self, value):
         if self.in_title:
             self.title.append(value)
+        if self.script is not None:
+            self.script.append(value)
 
 
 def _address(value, canonical):
@@ -132,14 +144,8 @@ def resolve(url, *, part=None, cookies=None, need=None):
             result['diagnostics'].append(diagnostic('transcript', Failure('subtitle_absent',
                 '91porn exposes no supported caption tracks.', 'Use local ASR.')))
     if needs.intersection(('video', 'audio', 'frames', 'media')):
-        addresses = list(page.sources)
-        for match in re.finditer(r'''document\.write\(\s*strencode2\(\s*(["'])([^"']+)\1\s*\)\s*\)''', text):
-            fragment = _Page()
-            # The player emits a literal <source>, not an executable script.
-            fragment.feed('<video id="player_one">' + unquote(match[2]) + '</video>')
-            addresses.extend(fragment.sources)
         seen = set()
-        for value in addresses:
+        for value in page.sources:
             address = _address(value, canonical)
             if not address or address in seen:
                 continue

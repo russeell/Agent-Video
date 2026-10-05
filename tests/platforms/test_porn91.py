@@ -49,7 +49,7 @@ class Porn91Tests(unittest.TestCase):
     def test_literal_player_percent_decoding_and_metadata(self):
         address = 'https://cdn.example.test/work.mp4?token=a%2Fb&expires=123'
         encoded = quote('<source src="' + address.replace('&', '&amp;') + '" type="video/mp4">', safe='')
-        page = PAGE + '<div>时长: <span>01:02</span></div><script>document.write(strencode2("' + encoded + '"));</script>'
+        page = PAGE.replace('</video>', '<script>document.write(strencode2("' + encoded + '"));</script></video>') + '<div>时长: <span>01:02</span></div>'
         with patch.object(porn91, 'read_text', return_value=page):
             result = porn91.resolve(URL, cookies='explicit-file', need=['video', 'transcript'])
         self.assertEqual(result['metadata']['duration'], 62)
@@ -57,6 +57,30 @@ class Porn91Tests(unittest.TestCase):
         self.assertIsNone(result['formats'][0]['has_audio'])
         self.assertNotIn('token=', repr(result['metadata']))
         self.assertEqual(result['diagnostics'][0]['code'], 'subtitle_absent')
+
+    def test_encoded_sources_belong_to_player_and_keep_document_order(self):
+        def encoded(name):
+            return 'document.write(strencode2("' + quote(
+                '<source src="https://cdn.example.test/' + name + '.mp4">', safe='') + '"));'
+        page = ('<title>Sample</title><script>' + encoded('outside') + '</script>'
+                '<video id="advertisement"><script>' + encoded('ad') + '</script></video>'
+                '<video id="player_one"><source src="https://cdn.example.test/first.mp4">'
+                '<!-- <script>' + encoded('comment') + '</script> -->'
+                '<script>' + encoded('second') + '</script>'
+                '<source src="https://cdn.example.test/third.mp4"></video>'
+                '<a href="?viewkey=abc123&action=comment">Comments</a>')
+        with patch.object(porn91, 'read_text', return_value=page):
+            result = porn91.resolve(URL, need=['video'])
+        self.assertEqual([f['url'] for f in result['formats']], [
+            'https://cdn.example.test/' + name + '.mp4' for name in ('first', 'second', 'third')])
+
+    def test_encoded_nonplayer_source_is_not_used_as_fallback(self):
+        encoded = quote('<source src="https://cdn.example.test/other.mp4">', safe='')
+        page = PAGE + '<script>document.write(strencode2("' + encoded + '"));</script>'
+        with patch.object(porn91, 'read_text', return_value=page):
+            result = porn91.resolve(URL, need=['video'])
+        self.assertEqual(result['formats'], [])
+        self.assertEqual(result['diagnostics'][0]['code'], 'media_unavailable')
 
     def test_direct_video_captions_and_info_do_not_fetch_media(self):
         page = PAGE + '<video id="player_one" src="https://cdn.example.test/work.mp4"><track kind="subtitles" src="https://cdn.example.test/sub.vtt" srclang="en"></video>'
