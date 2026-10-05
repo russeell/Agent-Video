@@ -77,7 +77,7 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 | **TED** | Native captions, download with audio, screenshots and reuse tested; some HLS variants are unsupported |
 | **Twitch** | Experimental: public clips tested at 1080p; completed-VOD information and stream discovery tested, full VOD download unverified |
 | **Pornhub** | Experimental: public MP4 download with audio and reuse tested; some HLS endpoints remain unavailable |
-| **Vimeo** | Information and captions tested; tested video streams were encrypted or access-restricted, so downloads remain unverified |
+| **Vimeo** | Experimental: available captions, 1080p downloads with audio, screenshots and reuse tested; some videos are encrypted or access-restricted |
 | **Reddit** | Experimental: native-video downloads, screenshots and reuse tested, including videos without audio |
 | **Kuaishou** | Experimental: public works and share links tested, including 720p downloads with audio, screenshots and reuse |
 | **Xiaohongshu** | Experimental: tested notes redirected to unavailable or security pages; information and downloads remain unverified |
@@ -91,7 +91,7 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 | **Ixigua** | Experimental: 720p downloads with audio, screenshots and reuse tested; anonymous reading may need [Chrome or Chromium](INSTALL.md#douyin), share links remain unverified |
 | **CCTV** | Experimental: CCTV / CNTV VOD downloads with audio, screenshots and audio export tested; best exposed quality in the samples was 270p; excludes Yangshipin |
 | **91porn** | Experimental: page information available on the main site and `up.91splt.app`; sample media differed from the page duration, so complete-work downloads remain unverified and mismatched files are rejected |
-| **MissAV** | Experimental: page and player parsing implemented; tested links encountered access verification, so information and downloads remain unverified |
+| **MissAV** | Experimental: single-work information, complete 720p downloads with audio, frame extraction and reuse tested; some pages may still require verification |
 
 Public links can still require authentication or verification. Netflix, Facebook, unknown websites, direct media links, live streams and DRM-protected videos are not supported. Downloaded files can be used as local input.
 

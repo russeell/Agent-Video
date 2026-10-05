@@ -1,9 +1,41 @@
 import unittest
+import json
 from unittest.mock import patch
 from scripts.platforms import Failure, select_formats, vimeo
 
 
 class VimeoTests(unittest.TestCase):
+    def test_denied_config_uses_matching_embed_json_with_public_hash(self):
+        config = {'video': {'id': 42, 'title': 'Public demo', 'duration': 82},
+                  'request': {'text_tracks': [{'url': '/captions/en.vtt', 'lang': 'en'}]}}
+        page = '<script>var playerConfig = ' + json.dumps(config) + '; initialize(playerConfig);</script>'
+        with (patch.object(vimeo, 'read_json', side_effect=Failure('access_denied', 'HTTP 403')),
+              patch('scripts.platforms.read_browser_text', return_value=page) as read):
+            result = vimeo.resolve('https://player.vimeo.com/video/42?h=abc', need=['transcript'], cookies='explicit.txt')
+        self.assertEqual(result['metadata']['duration'], 82)
+        self.assertEqual(result['formats'], [])
+        self.assertEqual(result['subtitles'][0]['language'], 'en')
+        read.assert_called_once_with('https://player.vimeo.com/video/42?h=abc', cookies='explicit.txt',
+                                     headers={'Referer': 'https://vimeo.com/42/abc'})
+
+    def test_embed_fallback_rejects_wrong_identity_and_non_json(self):
+        for page in ('<script>var playerConfig = {"video":{"id":99}};</script>',
+                     '<script>var playerConfig = {"video":"unexpected"};</script>',
+                     '<script>var playerConfig = makePlayerData();</script>'):
+            with (self.subTest(page=page), patch.object(vimeo, 'read_json', side_effect=Failure('access_denied', 'HTTP 403')),
+                  patch('scripts.platforms.read_browser_text', return_value=page)):
+                with self.assertRaises(Failure) as error:
+                    vimeo.resolve('https://vimeo.com/42', need=['info'])
+            self.assertEqual(error.exception.code, 'parse_failed')
+
+    def test_embed_fallback_does_not_retry_other_failures(self):
+        with (patch.object(vimeo, 'read_json', side_effect=Failure('network_failed', 'HTTP 404')),
+              patch('scripts.platforms.read_browser_text') as read):
+            with self.assertRaises(Failure) as error:
+                vimeo.resolve('https://vimeo.com/42', need=['info'])
+        self.assertEqual(error.exception.code, 'network_failed')
+        read.assert_not_called()
+
     def test_info_and_transcript_do_not_request_media(self):
         config = {'video': {'id': 42, 'title': 'Demo', 'duration': 7}, 'request': {
             'text_tracks': [{'url': '/captions/42.vtt', 'lang': 'en'}],

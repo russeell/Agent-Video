@@ -82,6 +82,14 @@ class MissavTests(unittest.TestCase):
             with patch.object(missav, 'read_text', return_value=page), self.assertRaises(Failure):
                 missav.resolve(URL, need=['info'])
 
+    def test_cloudflare_script_on_readable_work_is_not_a_challenge_page(self):
+        page = HEAD + '<meta property="og:video:duration" content="62.5"><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script><video src="https://cdn.test/work.mp4"></video>'
+        with patch.object(missav, 'read_text', return_value=page):
+            result = missav.resolve(URL, need=['video'])
+        self.assertEqual(result['metadata']['id'], 'studio-001')
+        self.assertEqual(result['metadata']['duration'], 62.5)
+        self.assertEqual(result['formats'][0]['url'], 'https://cdn.test/work.mp4')
+
     def test_javascript_executable_text_is_never_executed(self):
         page = HEAD + '<script>throw new Error("do not execute");var source="https://cdn.test/work.mp4";</script>'
         with patch.object(missav, 'read_text', return_value=page):

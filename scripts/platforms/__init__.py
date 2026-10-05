@@ -35,13 +35,7 @@ class _Redirect(urllib.request.HTTPRedirectHandler):
         return new
 
 
-def _opener(cookies=None):
-    context = ssl.create_default_context()
-    try:
-        import truststore
-        context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    except ImportError:
-        pass
+def _cookie_jar(cookies=None):
     jar = http.cookiejar.MozillaCookieJar(policy=http.cookiejar.DefaultCookiePolicy(
         strict_ns_domain=http.cookiejar.DefaultCookiePolicy.DomainStrictNonDomain))
     if cookies:
@@ -49,6 +43,17 @@ def _opener(cookies=None):
             jar.load(str(cookies), ignore_discard=True, ignore_expires=False)
         except (OSError, http.cookiejar.LoadError):
             raise Failure('invalid_cookies', 'Cannot read the Netscape Cookie file.', 'Provide an explicitly exported Cookie file.') from None
+    return jar
+
+
+def _opener(cookies=None):
+    context = ssl.create_default_context()
+    try:
+        import truststore
+        context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except ImportError:
+        pass
+    jar = _cookie_jar(cookies)
     return urllib.request.build_opener(_Redirect(), urllib.request.HTTPCookieProcessor(jar),
                                       urllib.request.HTTPSHandler(context=context))
 
@@ -98,6 +103,36 @@ def response_text(response):
 def read_text(url, *, headers=None, cookies=None, data=None, opener=None):
     with request(url, headers=headers, cookies=cookies, data=data, opener=opener) as response:
         return response_text(response)
+
+
+def read_browser_text(url, *, headers=None, cookies=None):
+    """Read a platform page that needs a browser-compatible HTTP/TLS client."""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ('http', 'https') or parsed.username or parsed.password:
+        raise Failure('invalid_url', 'Only HTTP(S) page addresses without embedded credentials are supported.')
+    from curl_cffi.requests import Session
+    from curl_cffi.requests.exceptions import RequestException
+    supplied = {k: v for k, v in (headers or {}).items()
+                if k.lower() not in ('cookie', 'authorization', 'proxy-authorization')}
+    try:
+        with Session(impersonate='chrome', cookies=_cookie_jar(cookies)) as session:
+            response = session.get(url, headers=supplied, timeout=30, max_redirects=5, stream=True)
+            try:
+                if response.status_code in (401, 403):
+                    raise Failure('access_denied', f'HTTP {response.status_code}: platform access was denied.')
+                if response.status_code >= 400:
+                    raise Failure('network_failed', f'HTTP request failed with status {response.status_code}.')
+                body = bytearray()
+                for chunk in response.iter_content():
+                    body.extend(chunk)
+                    if len(body) > 2000000:
+                        raise Failure('parse_failed', 'The platform page exceeds the static parsing limit.')
+                return body.decode('utf-8-sig', errors='replace')
+            finally:
+                response.close()
+    except RequestException:
+        raise Failure('network_failed', 'Platform page request failed (network or TLS).',
+                      'Check connectivity and system trust, then retry.') from None
 
 
 def read_json(url, *, headers=None, cookies=None, data=None, opener=None):

@@ -3,9 +3,32 @@ commit 51bab8a0116f4d8004c315706d809782607d5847 (Unlicense).
 No external extractor is imported or executed.
 """
 from datetime import datetime, timezone
+import json
 import re
 from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 from . import Failure, diagnostic, read_json, media
+
+
+def _config(player, query, canonical, identifier, cookies):
+    try:
+        return read_json(player + '/config' + query, cookies=cookies, headers={'Referer': canonical})
+    except Failure as exc:
+        if exc.code != 'access_denied':
+            raise
+    # Some public works deny the config endpoint while their native embed page
+    # exposes the same player data. Read its JSON assignment, never execute JS.
+    from . import read_browser_text
+    page = read_browser_text(player + query, cookies=cookies, headers={'Referer': canonical})
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r'\b(?:playerC|c)onfig\s*=\s*', page):
+        try:
+            config, _ = decoder.raw_decode(page[match.end():])
+        except ValueError:
+            continue
+        if (isinstance(config, dict) and isinstance(config.get('video'), dict)
+                and str(config['video'].get('id')) == identifier):
+            return config
+    raise Failure('parse_failed', 'Vimeo embed page exposes no matching native player JSON.')
 
 
 def resolve(url, *, part=None, cookies=None, need=None):
@@ -20,7 +43,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
     query = '?' + urlencode({'h': token}) if token else ''
     canonical = 'https://vimeo.com/' + identifier + ('/' + token if token else '')
     player = 'https://player.vimeo.com/video/' + identifier
-    config = read_json(player + '/config' + query, cookies=cookies, headers={'Referer': canonical})
+    config = _config(player, query, canonical, identifier, cookies)
     video, request = config.get('video') or {}, config.get('request') or {}
     if str(video.get('id')) != identifier:
         raise Failure('parse_failed', 'Vimeo returned no matching public video information.')

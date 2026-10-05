@@ -14,6 +14,71 @@ from scripts import platforms
 
 
 class HTTPTests(unittest.TestCase):
+    def test_browser_http_explicit_cookies_redirects_compression_and_body_bound(self):
+        observed = []
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                observed.append((self.path, self.headers.get('Cookie'), self.headers.get('Authorization')))
+                if self.path == '/redirect':
+                    self.send_response(302)
+                    self.send_header('Location', f'http://localhost:{self.server.server_port}/next')
+                    self.end_headers()
+                    return
+                status = int(self.path[1:]) if self.path in ('/401', '/403', '/500') else 200
+                payload = b'x' * 2000001 if self.path == '/large' else b'\xef\xbb\xbfhello'
+                if self.path == '/gzip':
+                    payload = gzip.compress(payload)
+                self.send_response(status)
+                if self.path == '/gzip':
+                    self.send_header('Content-Encoding', 'gzip')
+                self.send_header('Content-Length', str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+            def log_message(self, *args):
+                pass
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                cookie = Path(directory) / 'cookies.txt'
+                cookie.write_text('# Netscape HTTP Cookie File\n127.0.0.1\tFALSE\t/\tFALSE\t2147483647\tsession\tfixture\n')
+                root = f'http://127.0.0.1:{server.server_port}'
+                self.assertEqual(platforms.read_browser_text(root + '/gzip', cookies=cookie,
+                    headers={'Cookie': 'injected', 'Authorization': 'injected'}), 'hello')
+                self.assertEqual(platforms.read_browser_text(root + '/redirect', cookies=cookie), 'hello')
+                self.assertEqual(observed[:3], [('/gzip', 'session=fixture', None),
+                    ('/redirect', 'session=fixture', None), ('/next', None, None)])
+                for route, code in (('/401', 'access_denied'), ('/403', 'access_denied'),
+                                    ('/500', 'network_failed'), ('/large', 'parse_failed')):
+                    with self.subTest(route=route), self.assertRaises(platforms.Failure) as caught:
+                        platforms.read_browser_text(root + route)
+                    self.assertEqual(caught.exception.code, code)
+                self.assertEqual(len(observed), 7)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def test_browser_http_rejects_invalid_inputs_and_sanitizes_network_failure(self):
+        from curl_cffi.requests.exceptions import RequestException
+        with patch('curl_cffi.requests.Session') as session:
+            for url in ('file:///private', 'https://user:secret@example.test/page'):
+                with self.subTest(url=url), self.assertRaises(platforms.Failure) as caught:
+                    platforms.read_browser_text(url)
+                self.assertEqual(caught.exception.code, 'invalid_url')
+            session.assert_not_called()
+            with self.assertRaises(platforms.Failure) as caught:
+                platforms.read_browser_text('https://example.test/page', cookies='/nonexistent-cookie-file')
+            self.assertEqual(caught.exception.code, 'invalid_cookies')
+            client = session.return_value.__enter__.return_value
+            client.get.side_effect = RequestException('TLS failure https://example.test/?token=secret')
+            with self.assertRaises(platforms.Failure) as caught:
+                platforms.read_browser_text('https://example.test/page')
+            self.assertEqual(caught.exception.code, 'network_failed')
+            self.assertNotIn('secret', str(caught.exception))
+            self.assertEqual(client.get.call_count, 1)
+
     def test_compressed_json_and_guest_session_are_scoped_to_explicit_opener(self):
         observed = []
         class Handler(http.server.BaseHTTPRequestHandler):

@@ -9,7 +9,7 @@ description = "Let your agent watch videos: acquire timestamped evidence from vi
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.11"
-dependencies = ["truststore>=0.10", "websocket-client>=1.8", "cryptography>=43"]
+dependencies = ["truststore>=0.10", "websocket-client>=1.8", "cryptography>=43", "curl_cffi>=0.14"]
 
 [project.scripts]
 agent-video = "scripts.watch:main"

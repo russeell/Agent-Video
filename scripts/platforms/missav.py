@@ -9,9 +9,10 @@ HTTP challenges, authentication and encrypted/DRM media are not bypassed.
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 import json
+import math
 import re
 from urllib.parse import urljoin, urlsplit
-from . import Failure, diagnostic, read_text
+from . import Failure, diagnostic, read_browser_text as read_text
 
 
 _HOSTS = ('missav.ws', 'www.missav.ws', 'missav.com', 'www.missav.com')
@@ -144,16 +145,20 @@ def resolve(url, *, part=None, cookies=None, need=None):
         raise Failure('parse_failed', 'MissAV page exceeds the static parsing limit.')
     page = _Page()
     page.feed(text)
-    if re.search(r'challenge-platform|cf-chl-|g-recaptcha|h-captcha', text, re.I):
-        raise Failure('page_unavailable', 'MissAV returned a web challenge; no work data was acquired.',
-                      'Retry later or provide an explicitly exported Cookie file or local media.')
     declared = [value for value in (page.canonical, page.meta.get('og:url')) if value]
     if not declared or any(_identity(urljoin(canonical, value)) != identifier for value in declared):
+        if re.search(r'challenge-platform|cf-chl-|g-recaptcha|h-captcha', text, re.I):
+            raise Failure('page_unavailable', 'MissAV returned a web challenge; no work data was acquired.',
+                          'Retry later or provide an explicitly exported Cookie file or local media.')
         raise Failure('parse_failed', 'MissAV page does not confirm the requested single-work identity.')
     title = page.meta.get('og:title')
     if not title:
         raise Failure('parse_failed', 'MissAV page exposes no readable single-work metadata.')
-    duration, published, author = None, None, None
+    declared_duration = page.meta.get('og:video:duration') or ''
+    duration = float(declared_duration) if re.fullmatch(r'\d+(?:\.\d+)?', declared_duration) else None
+    if duration is not None and not math.isfinite(duration):
+        duration = None
+    published, author = None, None
     for script_type, script in page.scripts:
         if script_type != 'application/ld+json':
             continue
