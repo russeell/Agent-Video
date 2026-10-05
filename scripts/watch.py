@@ -182,12 +182,11 @@ class Watch:
                 raise InputError('An evidence manifest has a fixed source part.')
             if source.get('platform') == 'local':
                 self.local = Path(source['path'])
-                if not self.local.is_file():
-                    raise InputError('Original local source no longer exists.')
-                current = media.fingerprint(self.local)
-                if current != source.get('fingerprint'):
-                    self.data['artifacts'] = []
-                    source['fingerprint'] = current
+                if self.local.is_file():
+                    current = media.fingerprint(self.local)
+                    if current != source.get('fingerprint'):
+                        self.data['artifacts'] = []
+                        source['fingerprint'] = current
         else:
             if urlsplit(args.source).scheme in ('http', 'https'):
                 source = {'url': args.source}
@@ -308,8 +307,9 @@ class Watch:
                 if (not self.local and not a.get('internal')
                         and a.get('audio_track_default') is None):
                     continue
-                if self.local and a['audio_track'] != media.audio_index(self.info or media.probe(self.local)):
-                    continue
+                if self.local and a.get('audio_track_default') is not True:
+                    if not self.local.is_file() or a['audio_track'] != media.audio_index(self.info or media.probe(self.local)):
+                        continue
             if kind == 'transcript' and self.args.language and self.args.language not in (
                     a.get('requested_language'), a.get('language')):
                 continue
@@ -337,7 +337,7 @@ class Watch:
                 or artifact.get('quality_revision', 0) >= 1)
 
     def acquire(self, purpose):
-        if self.local:
+        if self.local and self.local.is_file():
             return self.local, self.info or media.probe(self.local)
         full_end = self.duration()
         for kind in (['video', 'audio'] if purpose == 'audio' else ['video']):
@@ -354,7 +354,7 @@ class Watch:
                     continue
                 path = manifest.artifact_path(self.directory, a)
                 info = media.probe(path)
-                if purpose in ('audio', 'video') and not a.get('internal'):
+                if purpose in ('audio', 'video') and info['audio'] and not a.get('internal'):
                     # Exports can select a different source track and renumber it.
                     if (self.args.audio_track is None and a.get('audio_track_default') is not True
                             or self.args.audio_track is not None and a.get('audio_track') != self.args.audio_track):
@@ -365,8 +365,8 @@ class Watch:
                 if purpose == 'video' and (not info['video'] or
                         (a.get('audio_track') is not None and not info['audio'])):
                     continue
-                if purpose == 'audio' and not info['audio']:
-                    if (a.get('internal') and not a.get('frames_only')
+                if not info['audio'] and (purpose == 'audio' or self.args.audio_track is not None):
+                    if ((a.get('internal') or self.local and kind == 'video') and not a.get('frames_only')
                             and a.get('audio_track') is None
                             and (self.access_context is None or a.get('access_context') == self.access_context)):
                         raise media.Failure('no_audio', 'The saved complete video has no audio stream.')
@@ -382,6 +382,10 @@ class Watch:
                     except media.Failure:
                         continue
                 return path, info
+        if self.local:
+            raise media.Failure('source_unavailable',
+                                'The original local file is unavailable and saved media cannot supply the requested material.',
+                                'Use the available saved materials, or restore the original file to obtain missing evidence.')
         cached_source = dict(self.data['source'])
         resolved = self.resolve(media_needed=True)
         if __package__:
