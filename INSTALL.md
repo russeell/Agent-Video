@@ -31,7 +31,7 @@ Keep an existing `.venv` if it uses Python 3.11+. If it is managed by uv and has
 Register the Skill for the current host from the project directory. Check an existing `agent-video` link before replacing it; do not overwrite an unrelated installation.
 
 ```bash
-# Codex
+# Codex / Pi (shared Agent Skills directory)
 mkdir -p "$HOME/.agents/skills"
 ln -s "$(pwd -P)" "$HOME/.agents/skills/agent-video"
 

@@ -472,6 +472,9 @@ class Watch:
         if existing:
             span = existing['source_range']
             if span == {'start': start, 'end': end}:
+                if 'text_span' not in existing:
+                    data = json.loads(manifest.artifact_path(self.directory, existing).read_text())
+                    existing['text_span'] = media.transcript_span(data['segments'])
                 self.deliver(existing)
                 return
             data = json.loads(manifest.artifact_path(self.directory, existing).read_text())
@@ -525,7 +528,8 @@ class Watch:
                 end = self.args.finish if self.args.finish is not None else info['duration']
         span = {'start': start, 'end': end}
         path, readable = media.transcript_files(self.directory, segments, language, origin, span)
-        fields = {'source_range': span, 'language': language, 'origin': origin,
+        fields = {'source_range': span, 'text_span': media.transcript_span(segments),
+                  'language': language, 'origin': origin,
                   'requested_language': self.args.language,
                   'readable_path': str(readable.relative_to(self.directory))}
         if track is not None:
@@ -684,6 +688,7 @@ class Watch:
         self.save()
         result = {'status': status, 'manifest': str(self.path),
                   'artifacts': [{'type': a['type'], 'path': str(manifest.artifact_path(self.directory, a)),
+                                 **({'text_span': a['text_span']} if 'text_span' in a else {}),
                                  **({'readable_path': str(manifest.artifact_path(self.directory, a, 'readable_path'))} if a.get('readable_path') else {})}
                                 for a in self.result], 'diagnostics': self.diagnostics}
         return result, {'ok': 0, 'partial': 2, 'error': 1}[status]

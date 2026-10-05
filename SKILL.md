@@ -48,6 +48,6 @@ Let your agent find and watch videos.
 "<skill_dir>/.venv/bin/agent-video" "<video-url>" --get video
 ```
 
-`--at` 应选择视频时长内的时刻。`--get` 可组合 `info,transcript,frames,audio,video`，默认 `transcript`；区间、语言、分 P 等参数见 `--help`。ASR 使用调用进程的 `AGENT_VIDEO_ASR_MODEL`，模型准备见安装文档。
+`--at` 应选择视频时长内的时刻。`--get` 可组合 `info,transcript,frames,audio,video`，默认 `transcript`；`--out` 指定材料目录，区间、语言、分 P 等参数见 `--help`。ASR 使用调用进程的 `AGENT_VIDEO_ASR_MODEL`，模型准备见安装文档。
 
-JSON 返回文件路径、manifest 和 diagnostics。打开文字稿的 `readable_path` 或图片；需要来源、范围及帧的 `actual_time` 时读取 manifest。回答注明实际 evidence、原视频时间和覆盖范围，交付时附文件链接。
+JSON 返回文件路径、manifest 和 diagnostics。打开文字稿的 `readable_path` 或图片；需要来源、范围及帧的 `actual_time` 时读取 manifest。文字稿的 `text_span` 是已有分段的首尾时间，不保证连续覆盖；`source_range` 是处理范围。回答注明实际 evidence、原视频时间和覆盖范围，交付时附文件链接。

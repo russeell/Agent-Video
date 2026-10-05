@@ -35,6 +35,23 @@ class SubtitleTests(unittest.TestCase):
                 media.clock(value)
         self.assertEqual(media.parse_subtitles('{"body":[{"from":1,"to":2,"content":"你好"}]}', 'json')[0]['text'], '你好')
 
+    def test_transcript_text_span_is_independent_of_processing_range(self):
+        for processing, segments, expected in [
+            ({'start': 0, 'end': 100}, [
+                {'start': 10, 'end': 20, 'text': 'First'},
+                {'start': 80, 'end': 90, 'text': 'Last'}], {'start': 10, 'end': 90}),
+            ({'start': 12, 'end': 20}, [
+                {'start': 10, 'end': 16.5, 'text': 'Overlapping first cue'},
+                {'start': 16.5, 'end': 21, 'text': 'Overlapping last cue'}], {'start': 10, 'end': 21}),
+            ({'start': 90, 'end': 100}, [], None),
+        ]:
+            with self.subTest(processing=processing), tempfile.TemporaryDirectory() as tmp:
+                path, _ = media.transcript_files(tmp, segments, 'en', 'platform_manual', processing)
+                data = json.loads(path.read_text())
+                self.assertEqual(data['source_range'], processing)
+                self.assertEqual(data['segments'], segments)
+                self.assertEqual(data['text_span'], expected)
+
     def test_invalid_json_subtitle_responses_are_not_absent_subtitles(self):
         for ext in ('json', 'json3'):
             for text in ('', ' \n\t', '<html>Unavailable</html>', '{"events":'):

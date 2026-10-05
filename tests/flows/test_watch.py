@@ -83,6 +83,39 @@ class WatchTests(unittest.TestCase):
                     data = json.loads(Path(bad['manifest']).read_text())
                     self.assertEqual([a['type'] for a in data['artifacts']], ['info'])
 
+    def test_legacy_transcript_reports_actual_text_span_without_reacquisition(self):
+        self.video.with_suffix('.srt').write_text('1\n00:00:00,200 --> 00:00:00,700\nBrief speech\n')
+        code, first = self.new()
+        self.assertEqual(code, 0, first)
+        evidence = Path(first['manifest'])
+        data = json.loads(evidence.read_text())
+        artifact = next(a for a in data['artifacts'] if a['type'] == 'transcript')
+        artifact.pop('text_span', None)
+        transcript = evidence.parent / artifact['path']
+        body = json.loads(transcript.read_text())
+        body.pop('text_span', None)
+        transcript.write_text(json.dumps(body))
+        evidence.write_text(json.dumps(data))
+        original = transcript.read_bytes()
+        expected = {'start': .2, 'end': .7}
+        with patch.object(watch, 'choose_local', side_effect=AssertionError('Cached subtitles must be reused')), \
+             patch.object(watch.Watch, 'acquire', side_effect=AssertionError('No media needed')), \
+             patch.object(media, 'transcribe', side_effect=AssertionError('No ASR needed')):
+            code, reused = self.call('--evidence', str(evidence))
+            self.assertEqual(code, 0, reused)
+            returned = next(a for a in reused['artifacts'] if a['type'] == 'transcript')
+            self.assertEqual(returned['text_span'], expected)
+            self.assertEqual(Path(returned['path']), transcript)
+            self.assertEqual(transcript.read_bytes(), original)
+            code, subset = self.call('--evidence', str(evidence), '--start', '.3', '--end', '.5')
+        self.assertEqual(code, 0, subset)
+        returned = next(a for a in subset['artifacts'] if a['type'] == 'transcript')
+        self.assertEqual(returned['text_span'], expected)
+        saved = json.loads(evidence.read_text())
+        full = next(a for a in saved['artifacts'] if a['id'] == artifact['id'])
+        self.assertEqual(full['source_range'], artifact['source_range'])
+        self.assertEqual(full['text_span'], expected)
+
     def test_supporter_only_media_preserves_info_and_one_access_diagnostic(self):
         from scripts import platforms
         from scripts.platforms import bilibili

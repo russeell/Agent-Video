@@ -204,13 +204,18 @@ def subtitle_range(segments, start, end):
     return [s for s in segments if s['end'] > start and (end is None or s['start'] < end)]
 
 
+def transcript_span(segments):
+    """First and last cue times, not a claim of continuous speech coverage."""
+    return {'start': min(s['start'] for s in segments), 'end': max(s['end'] for s in segments)} if segments else None
+
+
 def transcript_files(directory, segments, language, origin, source_range):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     stem = 'transcript-' + uuid.uuid4().hex[:10]
     path, readable = directory / (stem + '.json'), directory / (stem + '.md')
     atomic_json(path, {'language': language, 'origin': origin,
-                       'source_range': source_range, 'segments': segments})
+                       'source_range': source_range, 'text_span': transcript_span(segments), 'segments': segments})
     readable.write_text('\n'.join(f"[{s['start']:.3f}–{s['end']:.3f}] {s['text']}" for s in segments) + '\n', encoding='utf-8')
     return path, readable
 
