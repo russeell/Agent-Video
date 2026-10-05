@@ -44,6 +44,7 @@ class RoutingTest(unittest.TestCase):
                   (ixigua, 'https://v.ixigua.com/ShareWork/', None),
                   (cctv, 'https://tv.cctv.com/2021/12/13/VIDEexample.shtml', None),
                   (porn91, 'https://91porn.com/view_video.php?viewkey=abc123', None),
+                  (porn91, 'https://up.91splt.app/view_video.php?viewkey=abc123', None),
                   (missav, 'https://missav.ws/en/abc-123', None)]
         with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('Routing must not access HTTP')) as network:
             for adapter, source, part in routes:
@@ -65,6 +66,9 @@ class RoutingTest(unittest.TestCase):
                    ('https://pornhub.com.evil.test/view_video.php?viewkey=ph1234', 'unsupported_source'),
                    ('https://missav.ws.evil.test/en/abc-123', 'unsupported_source'),
                    ('https://91porn.com.evil.test/view_video.php?viewkey=abc123', 'unsupported_source'),
+                   ('https://up.91splt.app.evil.test/view_video.php?viewkey=abc123', 'unsupported_source'),
+                   ('https://unknown.91splt.app/view_video.php?viewkey=abc123', 'unsupported_source'),
+                   ('https://la.btc620.com/work.mp4', 'unsupported_source'),
                    ('https://drive.google.com.evil.test/file/d/work/view', 'unsupported_source'),
                    ('https://bsky.app.evil.test/profile/user/post/work', 'unsupported_source'),
                    ('https://v.qq.com/x/page/q326831cny0.html', 'unsupported_source'),

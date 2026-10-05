@@ -15,6 +15,27 @@ PAGE = '<title>Sample - Chinese homemade video</title><video id="player_one"></v
 
 
 class Porn91Tests(unittest.TestCase):
+    def test_mirror_keeps_origin_and_ignores_commented_media(self):
+        mirror = 'https://up.91splt.app/view_video.php?viewkey=abc123'
+        address = 'https://cdn.example.test/work.mp4?token=a%2Fb'
+        encoded = quote('<source src="' + address + '" type="video/mp4">', safe='')
+        page = ('<title>Sample - Chinese homemade video</title>'
+                '<video id="player_one">'
+                '<!-- <source src="https://cdn.example.test/unrelated.mp4"> -->'
+                '<script>document.write(strencode2("' + encoded + '"));</script></video>'
+                '<a href="?viewkey=abc123&action=comment">Comments</a>'
+                '<div>Duration: <span>00:10</span></div>')
+        for source in (mirror, 'http://up.91splt.app/view_video.php?c=tracking&viewkey=abc123&category='):
+            with self.subTest(source=source):
+                with patch.object(porn91, 'read_text', return_value=page) as fetch:
+                    result = platforms.resolve(source, cookies='explicit-file', need=['video'])
+                self.assertEqual(result['source'], {'platform': '91porn', 'id': 'abc123', 'url': mirror})
+                self.assertEqual(result['metadata']['duration'], 10)
+                self.assertEqual([f['url'] for f in result['formats']], [address])
+                self.assertEqual(result['formats'][0]['headers'], {'Referer': mirror})
+                fetch.assert_called_once_with(mirror, cookies='explicit-file',
+                                              headers={'Referer': 'https://up.91splt.app/'})
+
     def test_identity_and_query_normalization(self):
         with patch.object(porn91, 'read_text', return_value=PAGE) as fetch:
             result = porn91.resolve('http://www.91porn.com/view_video.php?utm=x&viewkey=abc123', need=['info'])
@@ -95,6 +116,8 @@ class Porn91Tests(unittest.TestCase):
 
     def test_invalid_urls_do_not_request(self):
         for url in ('https://91porn.com/v.php', 'https://91porn.com/view_video.php?viewkey=x&viewkey=y',
+                    'https://up.91splt.app/view_video.php?viewkey=x&viewkey=y',
+                    'https://up.91splt.app.evil.test/view_video.php?viewkey=x',
                     'https://91porn.com.evil.test/view_video.php?viewkey=x', 'https://user:pass@91porn.com/view_video.php?viewkey=x',
                     'https://91porn.com:bad/view_video.php?viewkey=x'):
             with self.subTest(url=url), patch.object(porn91, 'read_text') as fetch, self.assertRaises(Failure):

@@ -90,7 +90,7 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 | **Zhihu** | Experimental: zvideo downloads with audio, screenshots and reuse tested |
 | **Ixigua** | Experimental: 720p downloads with audio, screenshots and reuse tested; anonymous reading may need [Chrome or Chromium](INSTALL.md#douyin), share links remain unverified |
 | **CCTV** | Experimental: CCTV / CNTV VOD downloads with audio, screenshots and audio export tested; best exposed quality in the samples was 270p; excludes Yangshipin |
-| **91porn** | Experimental: work information tested; sample downloads were shorter than the stated works, so complete downloads remain unverified and incomplete files are rejected |
+| **91porn** | Experimental: work information tested on the main site and `up.91splt.app`; sample media differed from the page duration, so complete downloads remain unverified and mismatched files are rejected |
 | **MissAV** | Experimental: page and player parsing implemented; tested links encountered access verification, so information and downloads remain unverified |
 
 Public links can still require authentication or verification. Netflix, Facebook, unknown websites, direct media links, live streams and DRM-protected videos are not supported. Downloaded files can be used as local input.

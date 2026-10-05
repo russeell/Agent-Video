@@ -276,7 +276,11 @@ def download(resolved, directory, *, want_video=True, quality='auto', width=768,
             raise Failure('invalid_media', 'Downloaded media is missing the expected audio stream.')
         expected = resolved.get('metadata', {}).get('duration')
         if expected and actual['duration'] < expected - max(2, expected * .03):
-            raise Failure('download_incomplete', 'Downloaded media is shorter than the platform duration.', 'Retry or choose a different format.')
+            raise Failure('download_incomplete', f'Downloaded media is shorter than the platform duration ({actual["duration"]:g}s vs {expected:g}s).',
+                          'Check playback access or another available format.')
+        if expected and actual['duration'] > expected + max(2, expected * .03):
+            raise Failure('media_mismatch', f'Downloaded media is longer than the platform duration ({actual["duration"]:g}s vs {expected:g}s).',
+                          'Check work identity and playback access; do not reuse mismatched media.')
         for path in owned:
             if path != final:
                 path.unlink(missing_ok=True)
@@ -366,7 +370,7 @@ def resolve(url, *, part=None, cookies=None, need=None):
     if any(host == site or host.endswith('.' + site) for site in ('cctv.com', 'cctv.cn', 'cntv.com', 'cntv.cn')):
         from . import cctv
         return cctv.resolve(url, part=part, cookies=cookies, need=need)
-    if host in ('91porn.com', 'www.91porn.com'):
+    if host in ('91porn.com', 'www.91porn.com', 'up.91splt.app'):
         from . import porn91
         return porn91.resolve(url, part=part, cookies=cookies, need=need)
     if host in ('missav.ws', 'www.missav.ws', 'missav.com', 'www.missav.com'):

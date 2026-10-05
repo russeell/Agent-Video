@@ -15,7 +15,7 @@ def _identity(url):
     try:
         parsed = urlsplit(url)
         values = parse_qs(parsed.query).get('viewkey', [])
-        if (parsed.scheme in ('http', 'https') and parsed.hostname in ('91porn.com', 'www.91porn.com')
+        if (parsed.scheme in ('http', 'https') and parsed.hostname in ('91porn.com', 'www.91porn.com', 'up.91splt.app')
                 and not parsed.username and not parsed.password and parsed.port in (None, 80, 443)
                 and parsed.path == '/view_video.php' and len(values) == 1
                 and re.fullmatch(r'[A-Za-z0-9_]{1,100}', values[0])):
@@ -78,8 +78,10 @@ def resolve(url, *, part=None, cookies=None, need=None):
     identifier = _identity(url)
     if not identifier:
         raise Failure('invalid_url', 'A 91porn single-video viewkey URL is required.')
-    canonical = 'https://91porn.com/view_video.php?' + urlencode({'viewkey': identifier})
-    text = read_text(canonical, cookies=cookies, headers={'Referer': 'https://91porn.com/'})
+    host = urlsplit(url).hostname
+    origin = 'https://' + (host if host == 'up.91splt.app' else '91porn.com')
+    canonical = origin + '/view_video.php?' + urlencode({'viewkey': identifier})
+    text = read_text(canonical, cookies=cookies, headers={'Referer': origin + '/'})
     if len(text) > 2000000:
         raise Failure('parse_failed', '91porn page exceeds the static parsing limit.')
     if re.search(r'视频不存在|视频已被删除|Video (?:does not exist|has been deleted)', text, re.I):
