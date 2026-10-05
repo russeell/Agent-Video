@@ -296,6 +296,7 @@ class Watch:
                                 f'Requested interval is outside the source duration ({duration:g}s).')
 
     def matching(self, kind, start, end):
+        covering = None
         for a in self.data['artifacts']:
             if a['type'] != kind or not manifest.covers(a, start, end):
                 continue
@@ -326,8 +327,11 @@ class Watch:
                 if (kind == 'video' and not info['video'] or
                         (kind == 'audio' or a.get('audio_track') is not None) and not info['audio']):
                     continue
-            return a
-        return None
+            if a.get('source_range') == {'start': start, 'end': end}:
+                return a
+            if covering is None:
+                covering = a
+        return covering
 
     def current_quality(self, artifact):
         # Earlier Bilibili extraction could miss HD and mark 480p as the best source.
@@ -335,6 +339,26 @@ class Watch:
         needs_best = self.args.quality == 'source' or ('frames' in self.args.kinds and self.args.width == 0)
         return (not needs_best or self.data['source'].get('platform') != 'bilibili'
                 or artifact.get('quality_revision', 0) >= 1)
+
+    def audio_selection(self, path, info):
+        """Keep the source selection separate from an export's actual stream index."""
+        exported = next((a for a in self.data['artifacts'] if a['type'] == 'audio'
+                         and not a.get('internal')
+                         and manifest.artifact_path(self.directory, a) == path), None)
+        if exported:
+            source_track = exported.get('audio_track')
+            source_default = exported.get('audio_track_default')
+            source_end = exported.get('source_range', {}).get('end')
+            if (info['video'] or len(info['audio']) != 1
+                    or type(source_track) is not int or source_track < 0
+                    or type(source_default) is not bool
+                    or source_end is None or not manifest.covers(exported, 0, self.duration())
+                    or (self.args.audio_track is None and not source_default)
+                    or (self.args.audio_track is not None and self.args.audio_track != source_track)):
+                raise media.Failure('invalid_audio_track', 'Saved audio cannot prove the requested source track.')
+            return info['audio'][0]['index'], source_track, source_default, source_end
+        track = media.audio_index(info, self.args.audio_track)
+        return track, track, track == media.audio_index(info), None
 
     def acquire(self, purpose):
         if self.local and self.local.is_file():
@@ -356,10 +380,15 @@ class Watch:
                 info = media.probe(path)
                 if purpose in ('audio', 'video') and info['audio'] and not a.get('internal'):
                     # Exports can select a different source track and renumber it.
-                    if (self.args.audio_track is None and a.get('audio_track_default') is not True
+                    if kind == 'audio':
+                        try:
+                            self.audio_selection(path, info)
+                        except media.Failure:
+                            continue
+                    elif (self.args.audio_track is None and a.get('audio_track_default') is not True
                             or self.args.audio_track is not None and a.get('audio_track') != self.args.audio_track):
                         continue
-                    if info['audio'] and (a.get('audio_track') not in {s['index'] for s in info['audio']}
+                    if kind != 'audio' and (a.get('audio_track') not in {s['index'] for s in info['audio']}
                             or self.args.audio_track is None and a.get('audio_track') != media.audio_index(info)):
                         continue
                 if purpose == 'video' and (not info['video'] or
@@ -376,7 +405,7 @@ class Watch:
                     if not info['video'] or ((self.args.width == 0 or info['video']['width'] < self.args.width)
                                             and (not ceiling or info['video']['width'] < ceiling)):
                         continue
-                if self.args.audio_track is not None:
+                if self.args.audio_track is not None and not (kind == 'audio' and not a.get('internal')):
                     try:
                         media.audio_index(info, self.args.audio_track)
                     except media.Failure:
@@ -525,11 +554,11 @@ class Watch:
                                         'Provide subtitles or prepare ASR and set AGENT_VIDEO_ASR_MODEL.')
                 path, info = shared if shared and shared[1]['audio'] else self.acquire('audio')
                 self.check_range(info['duration'])
-                track = media.audio_index(info, self.args.audio_track)
-                track_default = track == media.audio_index(info)
-                data = media.transcribe(path, info, start, self.args.finish, self.args.language, track, model)
+                actual_track, track, track_default, source_end = self.audio_selection(path, info)
+                finish = self.args.finish if self.args.finish is not None else source_end
+                data = media.transcribe(path, info, start, finish, self.args.language, actual_track, model)
                 segments, language, origin = data['segments'], data['language'], 'asr'
-                end = self.args.finish if self.args.finish is not None else info['duration']
+                end = finish if finish is not None else info['duration']
         span = {'start': start, 'end': end}
         path, readable = media.transcript_files(self.directory, segments, language, origin, span)
         fields = {'source_range': span, 'text_span': media.transcript_span(segments),
@@ -596,12 +625,14 @@ class Watch:
             return
         path, info = shared
         self.check_range(info['duration'])
-        end = self.args.finish if self.args.finish is not None else info['duration']
-        track = media.audio_index(info, self.args.audio_track) if info['audio'] else None
+        actual_track, track, track_default, source_end = self.audio_selection(path, info) if info['audio'] else (None, None, None, None)
+        finish = self.args.finish if self.args.finish is not None else source_end
+        end = finish if finish is not None else info['duration']
         suffix = path.suffix if kind == 'video' and start == 0 and self.args.finish is None else ('.mkv' if kind == 'video' else '.mka')
         dest = self.directory / kind / (uuid.uuid4().hex[:10] + suffix)
         function = media.export_video if kind == 'video' else media.export_audio
-        details = function(path, dest, info, start, self.args.finish, self.args.audio_track)
+        details = function(path, dest, info, start, finish,
+                           actual_track if source_end is not None else self.args.audio_track)
         verified = media.probe(dest)
         if not dest.stat().st_size or (kind == 'video' and not verified['video']):
             raise media.Failure('invalid_media', 'Export does not contain the expected media.')
@@ -610,7 +641,7 @@ class Watch:
         fields = {'source_range': {'start': start, 'end': end}, 'transcoded': details['transcoded']}
         if track is not None:
             fields['audio_track'] = track
-            fields['audio_track_default'] = track == media.audio_index(info)
+            fields['audio_track_default'] = track_default
         if kind == 'video':
             fields['quality'] = 'source' if self.local else self.args.quality
             fields['access_context'] = self.access_context

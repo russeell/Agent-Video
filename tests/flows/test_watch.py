@@ -218,8 +218,8 @@ class WatchTests(unittest.TestCase):
             self.assertEqual(asr.call_count, 2)
             self.call('--evidence', evidence, '--get', 'transcript')
             self.assertEqual(asr.call_count, 2)
-            # With only a remote-derived audio left, stream 0 must not become
-            # source default stream 1. Unknown legacy selection is also unsafe.
+            # A known single-track export maps stream 0 to source default 1;
+            # unknown legacy selection still requires the original media.
             from scripts import platforms
             for legacy in (False, True):
                 with self.subTest(legacy=legacy):
@@ -248,8 +248,11 @@ class WatchTests(unittest.TestCase):
                             patch.object(platforms, 'download', side_effect=download) as fetch:
                         code, text = self.call('--evidence', str(remote_manifest), '--get', 'transcript')
                     self.assertEqual(code, 0, text)
-                    self.assertEqual(fetch.call_count, 1)
-                    self.assertEqual(asr.call_args.args[5], 1)
+                    self.assertEqual(fetch.call_count, 1 if legacy else 0)
+                    self.assertEqual(asr.call_args.args[5], 1 if legacy else 0)
+                    saved_text = next(a for a in json.loads(remote_manifest.read_text())['artifacts']
+                                      if a['type'] == 'transcript' and a.get('audio_track_default') is True)
+                    self.assertEqual(saved_text['audio_track'], 1)
 
     def test_explicit_transcript_language_does_not_resolve_default_ambiguity(self):
         self.video.with_suffix('.srt').unlink()

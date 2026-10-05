@@ -120,6 +120,13 @@ class LocalReuseTests(unittest.TestCase):
         self.assertTrue(info['video'])
         self.assertFalse(info['audio'])
         self.assertAlmostEqual(info['duration'], 1.2, delta=.21)
+        artifact_count = len(json.loads(Path(first['manifest']).read_text())['artifacts'])
+        with patch.object(media, 'export_video', side_effect=AssertionError('No repeated video export')):
+            code, cached_clip = self.call('--evidence', first['manifest'], '--get', 'video',
+                                          '--start', '.2', '--end', '1.4')
+        self.assertEqual(code, 0, cached_clip)
+        self.assertEqual(next(a['path'] for a in cached_clip['artifacts'] if a['type'] == 'video'), path)
+        self.assertEqual(len(json.loads(Path(first['manifest']).read_text())['artifacts']), artifact_count)
         for kind, selected in (('audio', []), ('audio', ['--audio-track', '1']),
                                ('video', ['--audio-track', '1'])):
             with self.subTest(kind=kind, selected=selected):
