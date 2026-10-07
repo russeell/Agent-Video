@@ -1,6 +1,7 @@
 """One entry point for obtaining and reusing video evidence."""
 from __future__ import annotations
 import argparse
+from glob import escape
 import hashlib
 from importlib.metadata import PackageNotFoundError, version
 import json
@@ -131,7 +132,7 @@ def diagnostic(stage, exc):
 def local_subtitles(path):
     candidates = []
     for ext in ('vtt', 'srt', 'json'):
-        for candidate in sorted(path.parent.glob(path.stem + '*.' + ext)):
+        for candidate in sorted(path.parent.glob(escape(path.stem) + '*.' + ext)):
             suffix = candidate.stem[len(path.stem):]
             if suffix and not suffix.startswith('.'):
                 continue

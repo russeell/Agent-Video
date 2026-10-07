@@ -92,12 +92,15 @@ class ConsoleTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg is required')
     def test_local_subtitles_and_manifest_reuse(self):
-        video = self.root / 'local video.mp4'
+        video = self.root / 'local video [01].mp4'
         subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i',
                         'color=size=64x48:rate=5:duration=1', '-c:v', 'mpeg4', str(video)], check=True)
         original = video.read_bytes()
         subtitle = video.with_suffix('.srt')
         subtitle.write_text('1\n00:00:00,000 --> 00:00:01,000\nLocal subtitle text\n', encoding='utf-8')
+        # Brackets in a filename are literal, not a glob character class.
+        (self.root / 'local video 0.srt').write_text(
+            '1\n00:00:00,000 --> 00:00:01,000\nUnrelated subtitle\n', encoding='utf-8')
         first = self.call(video, '--get', 'transcript', '--out', self.root / 'saved evidence')
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         result = json.loads(first.stdout)
