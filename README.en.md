@@ -11,7 +11,11 @@
   English · <a href="README.md">简体中文</a> · <a href="INSTALL.md">Install</a> · <a href="UPDATE.md">Update</a> · <a href="SKILL.md">Agent Skill</a>
 </p>
 
-Let your AI agent **find videos, understand their content, extract transcripts, and save audio or video**. Start with a video link, a local file or a description of what you need.
+**Give your agent a video link. Get answers, a transcript, or the audio and video files.**
+
+Agent Video retrieves transcripts, frames, audio and video so your AI agent can read the content and deliver files. It works with online videos and local files. Describe what you need to let your agent find candidates with its existing search tools, then read as needed.
+
+[Ask your agent to install it](#install) · [Check supported sources](#supported-sources)
 
 ## Example walkthrough
 
@@ -33,13 +37,13 @@ With this [Dragon Ball clip](https://www.bilibili.com/video/BV1X5411b7xA/): expl
 | **Download video** in the best available quality, or save a selected clip | “Download this video in the best available quality.” |
 | **Ask follow-ups** using the same saved materials | “Using that transcript, explain the second point.” |
 
-Finding videos uses your agent's [available search tools](SEARCH.md), with checks based on your requirements. Content claims are based on text or frames your agent has actually read.
+**Get what you need, reuse what you have.** Read a transcript for speech, inspect frames for visual questions, or download a file directly. Materials stay on your machine and are reused for follow-ups.
 
-Need only a file? Request it directly. Materials are saved and reused for follow-ups, extra screenshots and file delivery.
+Your agent handles search and understanding; Agent Video retrieves the materials. Finding videos requires [available search tools](SEARCH.md) in your host. Summaries and answers use text or frames the agent has actually read.
 
 ## Install
 
-Use it with an AI agent that can run commands and read text and images. Register the Skill if your host supports it, or use the CLI directly. Copy this message to your agent:
+Use it with any AI agent that can run commands and read text and images. Register the Skill if your host supports it, or use the CLI directly. Send this message to your agent:
 
 ```text
 Install Agent Video by following this guide:
@@ -50,7 +54,7 @@ Requires **Python 3.11+** and **FFmpeg**. The [installation guide](INSTALL.md) c
 
 ## Update
 
-Copy this message to your agent:
+Send this message to your agent:
 
 ```text
 Update my existing Agent Video installation by following this guide:
@@ -61,7 +65,12 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 
 ## Supported sources
 
-**v0.1 is an early release.** Support varies by platform and video; some links may still fail.
+Works with local files and videos from YouTube, Bilibili, Douyin, TikTok and other platforms. **v0.1 is an early release: support varies by platform and link. Not every video can be retrieved.**
+
+Complete video downloads from Xiaohongshu, WeChat Channels and 91porn have not passed real-world verification. Other sources also have limits, detailed below.
+
+<details>
+<summary><strong>Verified capabilities and limits by platform</strong></summary>
 
 | Source | What works today |
 |---|---|
@@ -93,9 +102,11 @@ The [update guide](UPDATE.md) preserves your existing setup and saved files.
 | **91porn** | Experimental: page information available on the main site and `up.91splt.app`; sample media differed from the page duration, so complete-work downloads remain unverified and mismatched files are rejected |
 | **MissAV** | Experimental: single-work information, complete 720p downloads with audio, frame extraction and reuse tested; some pages may still require verification |
 
+</details>
+
 Public links can still require authentication or verification. Netflix, Facebook, unknown websites, direct media links, live streams and DRM-protected videos are not supported. Downloaded files can be used as local input.
 
-Bilibili supporter-only videos require an account with access and an explicitly supplied Cookie file; a public video page does not guarantee public playback.
+Bilibili supporter-only videos require an account with access and an explicitly supplied Cookie file. Premium series links using `ep/ss` are not yet implemented. Access to a video page does not guarantee a complete download.
 
 Subtitles are used first. If none are available, optional speech-to-text can transcribe the audio. Transcripts may contain errors or cover only part of a video; screenshots show selected moments.
 
